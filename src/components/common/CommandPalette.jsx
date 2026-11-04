@@ -1,67 +1,56 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { actsAs } from '../../lib/roles.js';
 import { cn } from '../../utils/cn';
-import { Search, ChevronRight, ExternalLink, Zap, Users, Code2, Briefcase, GitBranch, Settings, Bookmark, Bell, Plus, HelpCircle, Moon, Sun, Keyboard, Command } from 'lucide-react';
+import { Search, ChevronRight, Zap, Users, Code2, Briefcase, Bell, Settings, Bookmark, Plus, HelpCircle, Moon, Keyboard, Command, LayoutDashboard, User, FileText } from 'lucide-react';
 
 const SHORTCUTS = [
-  { keys: ['⌘', 'K'], description: 'Open command palette' },
-  { keys: ['⌘', '⇧', 'K'], description: 'Show keyboard shortcuts' },
-  { keys: ['⌘', '/'], description: 'Focus search' },
-  { keys: ['⌘', 'B'], description: 'Toggle sidebar' },
-  { keys: ['⌘', 'D'], description: 'Toggle theme' },
-  { keys: ['G', 'D'], description: 'Go to dashboard' },
-  { keys: ['G', 'P'], description: 'Go to projects' },
-  { keys: ['G', 'J'], description: 'Go to jobs' },
-  { keys: ['G', 'C'], description: 'Go to connections' },
-  { keys: ['G', 'N'], description: 'Go to notifications' },
-  { keys: ['G', 'S'], description: 'Go to settings' },
-  { keys: ['G', 'H'], description: 'Go to home/landing' },
-  { keys: ['?'], description: 'Show help' },
+  { keys: ['⌘', 'K'], description: 'Open this command palette' },
+  { keys: ['⌘', 'D'], description: 'Toggle light / dark theme' },
+  { keys: ['↑', '↓'], description: 'Move through results' },
+  { keys: ['⏎'], description: 'Open the selected item' },
+  { keys: ['Esc'], description: 'Close' },
 ];
 
+// `icon` names a key in ICONS below. `roles` limits an entry to one workspace; shared
+// entries omit it. Every route here exists in the router — no dead destinations.
 const COMMANDS = [
-  { id: 'dashboard', label: 'Dashboard', description: 'View your personalized dashboard', icon: 'layout-dashboard', shortcut: 'G D', category: 'Navigation', route: '/' },
-  { id: 'developers', label: 'Developers', description: 'Browse and connect with developers', icon: 'users', shortcut: 'G C', category: 'Navigation', route: '/developers' },
-  { id: 'projects', label: 'Projects', description: 'Explore and showcase projects', icon: 'code', shortcut: 'G P', category: 'Navigation', route: '/projects' },
-  { id: 'jobs', label: 'Jobs', description: 'Discover job opportunities', icon: 'briefcase', shortcut: 'G J', category: 'Navigation', route: '/jobs' },
-  { id: 'connections', label: 'Connections', description: 'Manage your network', icon: 'git-branch', shortcut: 'G N', category: 'Navigation', route: '/connections' },
-  { id: 'notifications', label: 'Notifications', description: 'View your notifications', icon: 'bell', shortcut: 'G N', category: 'Navigation', route: '/notifications' },
-  { id: 'recommendations', label: 'Recommendations', description: 'Personalized recommendations', icon: 'zap', shortcut: '', category: 'Navigation', route: '/recommendations' },
-  { id: 'settings', label: 'Settings', description: 'Manage your account settings', icon: 'settings', shortcut: 'G S', category: 'Account', route: '/settings' },
-  { id: 'profile', label: 'My Profile', description: 'View and edit your profile', icon: 'user', shortcut: '', category: 'Account', route: '/profile' },
-  { id: 'profile-edit', label: 'Edit Profile', description: 'Update your profile information', icon: 'edit', shortcut: '', category: 'Account', route: '/profile/edit' },
-  { id: 'new-project', label: 'Create New Project', description: 'Add a new project to your portfolio', icon: 'plus', shortcut: '', category: 'Actions', route: '/projects/new' },
-  { id: 'saved-jobs', label: 'Saved Jobs', description: 'View your saved job listings', icon: 'bookmark', shortcut: '', category: 'Actions', route: '/jobs/saved' },
-  { id: 'my-applications', label: 'My Applications', description: 'Track your job applications', icon: 'file-text', shortcut: '', category: 'Actions', route: '/applications' },
-  { id: 'onboarding', label: 'Complete Onboarding', description: 'Finish setting up your profile', icon: 'user-plus', shortcut: '', category: 'Actions', route: '/onboarding' },
-  { id: 'theme-toggle', label: 'Toggle Theme', description: 'Switch between light and dark mode', icon: 'moon', shortcut: '⌘ D', category: 'Preferences', action: 'theme-toggle' },
-  { id: 'keyboard-shortcuts', label: 'Keyboard Shortcuts', description: 'View all available shortcuts', icon: 'keyboard', shortcut: '⌘ ⇧ K', category: 'Help', action: 'shortcuts' },
-  { id: 'help', label: 'Help & Documentation', description: 'Get help and read documentation', icon: 'help-circle', shortcut: '?', category: 'Help', action: 'help' },
-  { id: 'search-developers', label: 'Search Developers', description: 'Find developers by skills, location', icon: 'search', shortcut: '⌘ /', category: 'Search', action: 'search-developers' },
-  { id: 'search-projects', label: 'Search Projects', description: 'Find projects by technology', icon: 'search', shortcut: '', category: 'Search', action: 'search-projects' },
-  { id: 'search-jobs', label: 'Search Jobs', description: 'Find jobs by title, company', icon: 'search', shortcut: '', category: 'Search', action: 'search-jobs' },
+  { id: 'dashboard', label: 'Dashboard', description: 'Your overview and pending actions', icon: 'dashboard', category: 'Navigate', route: '/', roles: ['developer'] },
+  { id: 'recruiter', label: 'Recruiter overview', description: 'Pipeline and posting stats', icon: 'dashboard', category: 'Navigate', route: '/recruiter', roles: ['recruiter'] },
+  { id: 'jobs', label: 'Browse jobs', description: 'Search open roles and filters', icon: 'briefcase', category: 'Navigate', route: '/jobs', roles: ['developer'] },
+  { id: 'matches', label: 'Your matches', description: 'Roles ranked on your skills', icon: 'zap', category: 'Navigate', route: '/matches', roles: ['developer'] },
+  { id: 'saved-jobs', label: 'Saved jobs', description: 'Postings you bookmarked', icon: 'bookmark', category: 'Navigate', route: '/saved', roles: ['developer'] },
+  { id: 'applications', label: 'My applications', description: 'Track every application stage', icon: 'file-text', category: 'Navigate', route: '/applications', roles: ['developer'] },
+  { id: 'network', label: 'Network', description: 'Discover, requests and connections', icon: 'users', category: 'Navigate', route: '/network', roles: ['developer'] },
+  { id: 'repositories', label: 'GitHub preview', description: 'Repositories and contribution grid', icon: 'code', category: 'Navigate', route: '/repositories', roles: ['developer'] },
+  { id: 'profile', label: 'My profile', description: 'How recruiters see you', icon: 'user', category: 'Navigate', route: '/profile', roles: ['developer'] },
+  { id: 'profile-edit', label: 'Edit profile', description: 'Update headline, skills and links', icon: 'edit', category: 'Navigate', route: '/profile/edit', roles: ['developer'] },
+  { id: 'postings', label: 'Job postings', description: 'Manage your listings', icon: 'briefcase', category: 'Navigate', route: '/recruiter/jobs', roles: ['recruiter'] },
+  { id: 'new-posting', label: 'Post a job', description: 'Create a new opening', icon: 'plus', category: 'Navigate', route: '/recruiter/jobs/new', roles: ['recruiter'] },
+  { id: 'applicants', label: 'Applicants', description: 'Review and move candidates', icon: 'users', category: 'Navigate', route: '/recruiter/applicants', roles: ['recruiter'] },
+  { id: 'candidates', label: 'Saved candidates', description: 'Your shortlist', icon: 'bookmark', category: 'Navigate', route: '/recruiter/candidates', roles: ['recruiter'] },
+  { id: 'notifications', label: 'Notifications', description: 'Activity across your account', icon: 'bell', category: 'Account', route: '/notifications' },
+  { id: 'settings', label: 'Settings', description: 'Preferences, appearance and demo data', icon: 'settings', category: 'Account', route: '/settings' },
+  { id: 'theme-toggle', label: 'Toggle theme', description: 'Switch between light and dark', icon: 'moon', category: 'Preferences', action: 'theme' },
+  { id: 'keyboard-shortcuts', label: 'Keyboard shortcuts', description: 'View all available shortcuts', icon: 'keyboard', category: 'Help' },
 ];
 
 const ICONS = {
-  'layout-dashboard': <div className="w-4 h-4"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></div>,
-  'users': <Users className="h-4 w-4" />,
-  'code': <Code2 className="h-4 w-4" />,
-  'briefcase': <Briefcase className="h-4 w-4" />,
-  'git-branch': <GitBranch className="h-4 w-4" />,
-  'bell': <Bell className="h-4 w-4" />,
-  'zap': <Zap className="h-4 w-4" />,
-  'settings': <Settings className="h-4 w-4" />,
-  'user': <div className="w-4 h-4"><circle cx="12" cy="8" r="4"/><path d="M12 14c-5 0-8 3-8 7v1h16v-1c0-4-3-7-8-7"/></div>,
-  'edit': <div className="w-4 h-4"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></div>,
-  'plus': <Plus className="h-4 w-4" />,
-  'bookmark': <Bookmark className="h-4 w-4" />,
-  'file-text': <div className="w-4 h-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></div>,
-  'user-plus': <div className="w-4 h-4"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></div>,
-  'moon': <Moon className="h-4 w-4" />,
-  'keyboard': <Keyboard className="h-4 w-4" />,
+  dashboard: <LayoutDashboard className="h-4 w-4" />,
+  users: <Users className="h-4 w-4" />,
+  code: <Code2 className="h-4 w-4" />,
+  briefcase: <Briefcase className="h-4 w-4" />,
+  bell: <Bell className="h-4 w-4" />,
+  zap: <Zap className="h-4 w-4" />,
+  settings: <Settings className="h-4 w-4" />,
+  user: <User className="h-4 w-4" />,
+  edit: <HelpCircle className="h-4 w-4" />,
+  plus: <Plus className="h-4 w-4" />,
+  bookmark: <Bookmark className="h-4 w-4" />,
+  'file-text': <FileText className="h-4 w-4" />,
+  moon: <Moon className="h-4 w-4" />,
+  keyboard: <Keyboard className="h-4 w-4" />,
   'help-circle': <HelpCircle className="h-4 w-4" />,
-  'search': <Search className="h-4 w-4" />,
-  'sun': <Sun className="h-4 w-4" />,
-  'command': <Command className="h-4 w-4" />,
+  search: <Search className="h-4 w-4" />,
 };
 
 function CommandIcon({ name }) {
@@ -90,42 +79,66 @@ function ShortcutItem({ shortcut }) {
   );
 }
 
-export function CommandPalette({ isOpen, onClose, onNavigate, onAction }) {
+export function CommandPalette(props) {
+  if (!props.isOpen) return null;
+  // Keyed remount = a fresh query/selection/shortcuts state on every open, with no
+  // reset-on-open effect (which would cascade a second render right after opening).
+  return <CommandPalettePanel key="open" {...props} />;
+}
+
+function CommandPalettePanel({ onClose, onNavigate, onAction, role }) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const inputRef = useRef(null);
-  const listRef = useRef(null);
+
+  const available = useMemo(
+    () => COMMANDS.filter((cmd) => !cmd.roles || cmd.roles.some((capability) => actsAs(role, capability))),
+    [role],
+  );
 
   const filteredCommands = useMemo(() => {
-    if (!query) return COMMANDS;
-    
-    const lowerQuery = query.toLowerCase();
-    return COMMANDS.filter(cmd => 
-      cmd.label.toLowerCase().includes(lowerQuery) ||
-      cmd.description.toLowerCase().includes(lowerQuery) ||
-      (cmd.shortcut && cmd.shortcut.toLowerCase().includes(lowerQuery)) ||
-      cmd.category.toLowerCase().includes(lowerQuery) ||
-      (cmd.id && cmd.id.toLowerCase().includes(lowerQuery))
-    ).map((cmd, index) => ({
-      ...cmd,
-      _score: cmd.label.toLowerCase().startsWith(lowerQuery) ? 0 : 
-              cmd.label.toLowerCase().includes(lowerQuery) ? 1 : 2
-    })).sort((a, b) => a._score - b._score);
-  }, [query]);
+    const lowerQuery = query.trim().toLowerCase();
+    if (!lowerQuery) return available;
+
+    return available
+      .filter((cmd) =>
+        cmd.label.toLowerCase().includes(lowerQuery) ||
+        cmd.description.toLowerCase().includes(lowerQuery) ||
+        cmd.category.toLowerCase().includes(lowerQuery) ||
+        cmd.id.toLowerCase().includes(lowerQuery),
+      )
+      .map((cmd) => ({
+        ...cmd,
+        _score: cmd.label.toLowerCase().startsWith(lowerQuery) ? 0 : 1,
+      }))
+      .sort((a, b) => a._score - b._score);
+  }, [query, available]);
 
   useEffect(() => {
-    if (isOpen) {
-      setQuery('');
-      setSelectedIndex(0);
-      setShowShortcuts(false);
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }, [isOpen]);
+    inputRef.current?.focus();
+  }, []);
+
+  const executeCommand = useCallback(
+    (cmd) => {
+      if (cmd.action === 'theme') {
+        onAction?.('theme');
+        onClose();
+        return;
+      }
+      if (cmd.id === 'keyboard-shortcuts') {
+        setShowShortcuts(true);
+        return;
+      }
+      if (cmd.route) {
+        onNavigate?.(cmd.route);
+        onClose();
+      }
+    },
+    [onAction, onClose, onNavigate],
+  );
 
   useEffect(() => {
-    if (!isOpen) return;
-
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         onClose();
@@ -160,23 +173,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate, onAction }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, filteredCommands, selectedIndex, onClose]);
-
-  const executeCommand = (cmd) => {
-    if (cmd.action === 'theme-toggle') {
-      onAction?.('theme-toggle');
-    } else if (cmd.action === 'shortcuts') {
-      setShowShortcuts(true);
-      return;
-    } else if (cmd.action === 'help') {
-      onAction?.('help');
-    } else if (cmd.action?.startsWith('search-')) {
-      onAction?.(cmd.action);
-    } else if (cmd.route) {
-      onNavigate?.(cmd.route);
-    }
-    onClose();
-  };
+  }, [filteredCommands, selectedIndex, onClose, executeCommand]);
 
   const handleInputChange = (e) => {
     setQuery(e.target.value);
@@ -184,11 +181,9 @@ export function CommandPalette({ isOpen, onClose, onNavigate, onAction }) {
     setShowShortcuts(false);
   };
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-[var(--z-index-modal)] flex items-start justify-center pt-20" role="dialog" aria-modal="true" aria-label="Command palette">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div className="absolute inset-0 bg-[rgb(17_24_39/0.5)]" onClick={onClose} aria-hidden="true" />
       
       <div className="relative w-full max-w-2xl mx-4 animate-fade-up">
         <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-xl overflow-hidden">

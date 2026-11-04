@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../utils/cn';
 import { X } from 'lucide-react';
 
@@ -48,7 +49,10 @@ export function Modal({
   
   if (!isOpen) return null;
   
-  return (
+  // Mounted on <body>: a page container running an entrance animation keeps a transform, and a
+  // transformed ancestor silently captures `position: fixed` — the dialog then renders relative to
+  // that container, far below the fold, looking as though the button that opened it did nothing.
+  return createPortal(
     <div
       className="fixed inset-0 z-[var(--z-index-modal-backdrop)] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={handleBackdropClick}
@@ -87,6 +91,7 @@ export function Modal({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

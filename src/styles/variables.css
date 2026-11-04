@@ -1,37 +1,81 @@
+/**
+ * Design tokens — navy / warm ivory / slate / coral.
+ *
+ * Variable NAMES are preserved from the previous system because ~900 existing
+ * `text-[var(--color-*)]` references resolve through them: recolouring the tokens
+ * converts those screens without touching them. New code should use the semantic
+ * Tailwind utilities generated from @theme below (`bg-surface`, `text-secondary`,
+ * `border-line`) rather than arbitrary var() values.
+ *
+ * Deliberately absent: decorative gradients, glass surfaces, glow shadows, float
+ * animations. Surfaces are separated by borders, whitespace and one elevation step.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Consolas, monospace;
+
+  --color-canvas: var(--color-background);
+  --color-canvas-alt: var(--color-background-alt);
+  --color-surface: var(--color-surface);
+  --color-surface-alt: var(--color-surface-alt);
+  --color-line: var(--color-border);
+  --color-line-strong: var(--color-border-strong);
+  --color-ink: var(--color-text-primary);
+  --color-ink-secondary: var(--color-text-secondary);
+  --color-ink-muted: var(--color-text-tertiary);
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-error);
+  --color-info: var(--color-info);
+
+  --radius-card: 0.625rem;
+  --radius-control: 0.4375rem;
+
+  --breakpoint-xs: 30rem;
+}
+
 :root {
-  /* ── Brand Colors ─────────────────────────────────────────── */
-  --color-primary:        #6366f1;
-  --color-primary-hover:  #4f46e5;
-  --color-primary-light:  #a5b4fc;
-  --color-primary-dark:   #3730a3;
-  --color-primary-rgb:    99, 102, 241;
+  /* ── Brand ────────────────────────────────────────────────── */
+  --color-primary:        #111827;   /* deep navy — buttons, active nav, headings */
+  --color-primary-hover:  #1f2937;
+  --color-primary-light:  #94a3b8;
+  --color-primary-dark:   #0b1120;
+  --color-primary-rgb:    17, 24, 39;
 
-  --color-secondary:      #06b6d4;
-  --color-secondary-hover:#0891b2;
-  --color-secondary-light:#67e8f9;
-  --color-secondary-dark: #0e7490;
+  --color-secondary:      #334155;   /* slate, used for secondary actions */
+  --color-secondary-hover:#475569;
+  --color-secondary-light:#cbd5e1;
+  --color-secondary-dark: #1e293b;
 
-  --color-accent:         #8b5cf6;
-  --color-accent-hover:   #7c3aed;
-  --color-accent-light:   #c4b5fd;
-  --color-accent-dark:    #5b21b6;
+  --color-accent:         #f4775b;   /* coral — highlights, primary CTAs, unread */
+  --color-accent-hover:   #dd5f43;
+  --color-accent-light:   #fbdccf;
+  --color-accent-dark:    #a8402a;
+  --color-accent-rgb:     244, 119, 91;
 
-  --color-rose:           #f43f5e;
-  --color-amber:          #f59e0b;
-  --color-emerald:        #10b981;
+  --color-rose:           #e11d48;
+  --color-amber:          #b45309;
+  --color-emerald:        #047857;
 
-  /* ── Neutral Palette ──────────────────────────────────────── */
+  /* ── Neutral palette (paper-leaning, no blue cast) ────────── */
   --color-white:          #ffffff;
-  --color-gray-50:        #f9fafb;
-  --color-gray-100:       #f3f4f6;
+  --color-gray-50:        #fafafa;
+  --color-gray-100:       #f4f3f0;
   --color-gray-200:       #e5e7eb;
-  --color-gray-300:       #d1d5db;
-  --color-gray-400:       #9ca3af;
-  --color-gray-500:       #6b7280;
-  --color-gray-600:       #4b5563;
-  --color-gray-700:       #374151;
-  --color-gray-800:       #1f2937;
-  --color-gray-900:       #111827;
+  --color-gray-300:       #d4d4d0;
+  --color-gray-400:       #a3a3a0;
+  --color-gray-500:       #737373;
+  --color-gray-600:       #52525b;
+  --color-gray-700:       #3f3f46;
+  --color-gray-800:       #27272a;
+  --color-gray-900:       #18181b;
 
   --color-slate-50:       #f8fafc;
   --color-slate-100:      #f1f5f9;
@@ -45,58 +89,58 @@
   --color-slate-900:      #0f172a;
 
   /* ── Semantic ─────────────────────────────────────────────── */
-  --color-success:        #10b981;
-  --color-success-light:  #34d399;
-  --color-success-dark:   #059669;
+  --color-success:        #15803d;
+  --color-success-light:  #dcfce7;
+  --color-success-dark:   #14532d;
 
-  --color-warning:        #f59e0b;
-  --color-warning-light:  #fbbf24;
-  --color-warning-dark:   #d97706;
+  --color-warning:        #b45309;
+  --color-warning-light:  #fef3c7;
+  --color-warning-dark:   #92400e;
 
-  --color-error:          #ef4444;
-  --color-error-light:    #f87171;
-  --color-error-dark:     #dc2626;
+  --color-error:          #b91c1c;
+  --color-error-light:    #fee2e2;
+  --color-error-dark:     #7f1d1d;
 
-  --color-info:           #06b6d4;
-  --color-info-light:     #67e8f9;
-  --color-info-dark:      #0891b2;
+  --color-info:           #0369a1;
+  --color-info-light:     #e0f2fe;
+  --color-info-dark:      #075985;
 
-  /* ── Light Theme Surfaces ─────────────────────────────────── */
-  --color-background:     #f5f6ff;
+  /* ── Surfaces: warm ivory ground, white content cards ─────── */
+  --color-background:     #faf9f6;
   --color-surface:        #ffffff;
-  --color-surface-alt:    #eef0ff;
+  --color-surface-alt:    #f4f3f0;
   --color-surface-raised: #ffffff;
-  --color-background-alt: #eceeff;
+  --color-background-alt: #f1efeb;
 
   /* ── Text ─────────────────────────────────────────────────── */
-  --color-text-primary:   #0d0e1c;
-  --color-text-secondary: #4b4d6a;
-  --color-text-tertiary:  #878aa5;
+  --color-text-primary:   #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary:  #7b8290;
   --color-text-inverse:   #ffffff;
   --color-text-on-primary:#ffffff;
 
   /* ── Borders ──────────────────────────────────────────────── */
-  --color-border:         #e2e4f0;
-  --color-border-hover:   #c5c9e4;
-  --color-border-focus:   #6366f1;
-  --color-border-strong:  #b8bcd4;
+  --color-border:         #e5e7eb;
+  --color-border-hover:   #cbd5e1;
+  --color-border-focus:   #f4775b;
+  --color-border-strong:  #d1d5db;
 
-  /* ── Shadows ──────────────────────────────────────────────── */
-  --shadow-xs:  0 1px 2px 0 rgb(0 0 0 / .04);
-  --shadow-sm:  0 2px 6px rgb(20 20 60 / .05), 0 1px 2px rgb(20 20 60 / .04);
-  --shadow-md:  0 8px 24px rgb(20 20 80 / .08), 0 2px 6px rgb(20 20 80 / .04);
-  --shadow-lg:  0 20px 48px rgb(20 20 80 / .12), 0 6px 16px rgb(20 20 80 / .05);
-  --shadow-xl:  0 32px 72px rgb(20 20 80 / .17), 0 12px 28px rgb(20 20 80 / .07);
-  --shadow-glow:0 0 0 3px rgb(99 102 241 / .18), 0 8px 24px rgb(99 102 241 / .22);
-  --shadow-card:0 1px 3px rgb(0 0 0 / .06), 0 4px 12px rgb(99 102 241 / .06);
+  /* ── Elevation: two real steps, no glow ───────────────────── */
+  --shadow-xs:  0 1px 1px rgb(17 24 39 / .04);
+  --shadow-sm:  0 1px 2px rgb(17 24 39 / .05);
+  --shadow-md:  0 2px 4px rgb(17 24 39 / .04), 0 8px 20px rgb(17 24 39 / .06);
+  --shadow-lg:  0 4px 8px rgb(17 24 39 / .05), 0 16px 40px rgb(17 24 39 / .10);
+  --shadow-xl:  0 8px 16px rgb(17 24 39 / .08), 0 24px 56px rgb(17 24 39 / .14);
+  --shadow-glow: 0 0 0 3px rgb(244 119 91 / .22);
+  --shadow-card: 0 0 0 1px rgb(17 24 39 / .04), 0 1px 2px rgb(17 24 39 / .04);
 
-  /* ── Radius ───────────────────────────────────────────────── */
+  /* ── Radius: restrained, 7/10/14 ──────────────────────────── */
   --radius-sm:   0.25rem;
-  --radius-md:   0.5rem;
-  --radius-lg:   0.75rem;
-  --radius-xl:   1rem;
-  --radius-2xl:  1.25rem;
-  --radius-3xl:  1.5rem;
+  --radius-md:   0.4375rem;
+  --radius-lg:   0.625rem;
+  --radius-xl:   0.875rem;
+  --radius-2xl:  1rem;
+  --radius-3xl:  1.25rem;
   --radius-full: 9999px;
 
   /* ── Spacing ──────────────────────────────────────────────── */
@@ -108,21 +152,21 @@
   --spacing-2xl:  3rem;
   --spacing-3xl:  4rem;
 
-  /* ── Typography ───────────────────────────────────────────── */
+  /* ── Typography: compact editorial scale ──────────────────── */
   --font-family-base: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-family-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Consolas, monospace;
 
   --font-size-xs:   0.75rem;
-  --font-size-sm:   0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg:   1.125rem;
-  --font-size-xl:   1.25rem;
-  --font-size-2xl:  1.5rem;
-  --font-size-3xl:  1.875rem;
-  --font-size-4xl:  2.25rem;
-  --font-size-5xl:  3rem;
-  --font-size-6xl:  3.75rem;
+  --font-size-sm:   0.8125rem;
+  --font-size-base: 0.9375rem;
+  --font-size-lg:   1.0625rem;
+  --font-size-xl:   1.1875rem;
+  --font-size-2xl:  1.375rem;
+  --font-size-3xl:  1.625rem;
+  --font-size-4xl:  2rem;
+  --font-size-5xl:  2.5rem;
+  --font-size-6xl:  3.25rem;
 
   --font-weight-normal:   400;
   --font-weight-medium:   500;
@@ -131,16 +175,18 @@
   --font-weight-extrabold:800;
 
   --line-height-tight:   1.2;
-  --line-height-snug:    1.35;
-  --line-height-normal:  1.5;
-  --line-height-relaxed: 1.75;
+  --line-height-snug:    1.4;
+  --line-height-normal:  1.55;
+  --line-height-relaxed: 1.7;
 
   /* ── Component dimensions ─────────────────────────────────── */
   --height-input:     2.5rem;
   --height-button:    2.5rem;
   --height-button-sm: 2rem;
   --height-button-lg: 3rem;
-  --height-header:    4.25rem;
+  --height-header:    3.75rem;
+  --width-sidebar:    15.5rem;
+  --target-touch:     2.75rem;
 
   /* ── Content widths ───────────────────────────────────────── */
   --width-content-sm:  640px;
@@ -160,81 +206,75 @@
   --z-index-toast:          1080;
 
   /* ── Transitions ──────────────────────────────────────────── */
-  --transition-fast:   130ms cubic-bezier(.4, 0, .2, 1);
-  --transition-base:   200ms cubic-bezier(.4, 0, .2, 1);
-  --transition-slow:   320ms cubic-bezier(.4, 0, .2, 1);
-  --transition-spring: 400ms cubic-bezier(.34, 1.56, .64, 1);
+  --transition-fast:   120ms cubic-bezier(.4, 0, .2, 1);
+  --transition-base:   180ms cubic-bezier(.4, 0, .2, 1);
+  --transition-slow:   260ms cubic-bezier(.4, 0, .2, 1);
 
-  /* ── Gradients ────────────────────────────────────────────── */
-  --gradient-primary:  linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  --gradient-vivid:    linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
-  --gradient-warm:     linear-gradient(135deg, #f43f5e 0%, #f59e0b 100%);
-  --gradient-subtle:   linear-gradient(135deg, #f5f6ff 0%, #eef0ff 100%);
-  --gradient-dark:     linear-gradient(135deg, #0d0e1c 0%, #1a1b35 100%);
-  --gradient-mesh:     
-    radial-gradient(at 40% 20%, rgb(99 102 241 / .15) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, rgb(139 92 246 / .12) 0px, transparent 50%),
-    radial-gradient(at 0% 50%, rgb(6 182 212 / .10) 0px, transparent 50%),
-    radial-gradient(at 80% 100%, rgb(99 102 241 / .08) 0px, transparent 50%);
-  
-  /* Enhanced gradients for modern UI */
-  --gradient-hero:     linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --gradient-card:     linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
-  --gradient-shimmer:  linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
-  --gradient-glass:    linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
-  
-  /* Animation keyframes */
-  --animation-fade-in: fadeIn 0.3s ease-out;
-  --animation-slide-up: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  --animation-slide-down: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  --animation-scale-in: scaleIn 0.2s ease-out;
-  --animation-shimmer: shimmer 2s infinite;
-  --animation-float: float 3s ease-in-out infinite;
-  --animation-pulse-soft: pulseSoft 2s ease-in-out infinite;
+  /* Flattened: every former gradient resolves to a solid surface. Kept as tokens so
+     the dozen existing references inherit the new identity instead of breaking. */
+  --gradient-primary: var(--color-primary);
+  --gradient-vivid:   var(--color-primary);
+  --gradient-warm:    var(--color-accent);
+  --gradient-subtle:  var(--color-background);
+  --gradient-dark:    var(--color-primary-dark);
+
+  /* ── Motion: functional only ──────────────────────────────── */
+  --animation-fade-in: fadeIn 0.24s ease-out;
+  --animation-slide-up: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animation-slide-down: slideDown 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  --animation-scale-in: scaleIn 0.18s ease-out;
+  --animation-shimmer: shimmer 1.6s infinite;
 }
 
-/* ── Dark Theme ───────────────────────────────────────────────── */
+/* ── Dark theme: same hierarchy, inverted surfaces ────────────── */
 [data-theme="dark"] {
-  --color-background:     #0b0c1a;
-  --color-surface:        #13152a;
-  --color-surface-alt:    #1c1f3a;
-  --color-surface-raised: #1c1f3a;
-  --color-background-alt: #0f1020;
+  --color-primary:        #e7e5e0;   /* light ink on dark surfaces */
+  --color-primary-hover:  #ffffff;
+  --color-primary-light:  #64748b;
+  --color-primary-dark:   #cbd5e1;
+  --color-primary-rgb:    231, 229, 224;
 
-  --color-text-primary:   #f0f1ff;
-  --color-text-secondary: #b8bbd8;
-  --color-text-tertiary:  #7a7d9e;
-  --color-text-inverse:   #0d0e1c;
+  --color-secondary:      #cbd5e1;
+  --color-secondary-hover:#e2e8f0;
 
-  --color-border:         #252847;
-  --color-border-hover:   #383c62;
-  --color-border-focus:   #818cf8;
-  --color-border-strong:  #44486e;
+  --color-accent:         #f4876e;
+  --color-accent-hover:   #f7a08a;
+  --color-accent-light:   #46251b;
+  --color-accent-dark:    #fbdccf;
 
-  --color-gray-50:        #0f1020;
-  --color-gray-100:       #1a1d35;
-  --color-gray-200:       #252847;
-  --color-gray-300:       #323660;
-  --color-gray-400:       #4a4e78;
-  --color-gray-500:       #6b6f96;
-  --color-gray-600:       #9699b8;
-  --color-gray-700:       #c4c7de;
-  --color-gray-800:       #e0e2f0;
-  --color-gray-900:       #f0f1ff;
+  --color-background:     #10151f;
+  --color-surface:        #161d29;
+  --color-surface-alt:    #1c2532;
+  --color-surface-raised: #1f2937;
+  --color-background-alt: #0c1017;
 
-  --shadow-sm:  0 2px 6px rgb(0 0 0 / .25), 0 1px 2px rgb(0 0 0 / .18);
-  --shadow-md:  0 8px 24px rgb(0 0 0 / .32), 0 2px 6px rgb(0 0 0 / .2);
-  --shadow-lg:  0 20px 48px rgb(0 0 0 / .42), 0 6px 16px rgb(0 0 0 / .25);
-  --shadow-xl:  0 32px 72px rgb(0 0 0 / .52), 0 12px 28px rgb(0 0 0 / .3);
-  --shadow-glow:0 0 0 3px rgb(99 102 241 / .28), 0 8px 28px rgb(99 102 241 / .32);
-  --shadow-card:0 1px 3px rgb(0 0 0 / .3), 0 4px 12px rgb(0 0 0 / .22);
+  --color-text-primary:   #f3f1ee;
+  --color-text-secondary: #b6bcc7;
+  --color-text-tertiary:  #838b99;
+  --color-text-inverse:   #111827;
+  --color-text-on-primary:#111827;
 
-  --gradient-subtle: linear-gradient(135deg, #13152a 0%, #1c1f3a 100%);
-  --gradient-mesh:
-    radial-gradient(at 40% 20%, rgb(99 102 241 / .22) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, rgb(139 92 246 / .18) 0px, transparent 50%),
-    radial-gradient(at 0% 50%, rgb(6 182 212 / .14) 0px, transparent 50%),
-    radial-gradient(at 80% 100%, rgb(99 102 241 / .12) 0px, transparent 50%);
+  --color-border:         #27303f;
+  --color-border-hover:   #3a4557;
+  --color-border-focus:   #f4876e;
+  --color-border-strong:  #45526a;
+
+  --color-success:        #4ade80;
+  --color-success-light:  #14321f;
+  --color-warning:        #fbbf24;
+  --color-warning-light:  #33260a;
+  --color-error:          #f87171;
+  --color-error-light:    #3a1414;
+  --color-info:           #38bdf8;
+  --color-info-light:     #0c2b3d;
+
+  --shadow-xs: 0 1px 1px rgb(0 0 0 / .3);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / .35);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / .3), 0 8px 20px rgb(0 0 0 / .35);
+  --shadow-lg: 0 4px 8px rgb(0 0 0 / .35), 0 16px 40px rgb(0 0 0 / .45);
+  --shadow-xl: 0 8px 16px rgb(0 0 0 / .4), 0 24px 56px rgb(0 0 0 / .55);
+  --shadow-glow: 0 0 0 3px rgb(244 135 110 / .3);
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / .05), 0 1px 2px rgb(0 0 0 / .3);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -242,68 +282,52 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
-/* Global keyframes */
+/* Same guarantee for the in-app preference, which is independent of the OS setting.
+   Transforms still apply (a 1px press is not vestibular motion) but never tween. */
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 @keyframes slideUp {
-  from { 
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideDown {
-  from { 
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scaleIn {
-  from { 
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to { 
-    opacity: 1;
-    transform: scale(1);
-  }
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-@keyframes pulseSoft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-/* Utility animation classes */
 .animate-fade-in { animation: var(--animation-fade-in); }
 .animate-slide-up { animation: var(--animation-slide-up); }
 .animate-slide-down { animation: var(--animation-slide-down); }
 .animate-scale-in { animation: var(--animation-scale-in); }
-.animate-shimmer { animation: var(--animation-shimmer); }
-.animate-float { animation: var(--animation-float); }
-.animate-pulse-soft { animation: var(--animation-pulse-soft); }
+.animate-shimmer {
+  background-image: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / .28) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: var(--animation-shimmer);
+}

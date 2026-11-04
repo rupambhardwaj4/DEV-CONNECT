@@ -1,399 +1,388 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowRight,
+  Bell,
+  Bookmark,
+  CalendarClock,
+  Check,
+  ClipboardList,
+  Sparkles,
+  UserPlus,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../context';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Avatar } from '../components/common';
-import { DashboardSkeleton } from '../components/common/LoadingSkeleton';
-import { Users, Briefcase, Bell, Settings, Code2, ArrowRight, Search, Plus } from 'lucide-react';
-import { developersService, connectionsService, notificationsService, projectsService } from '../services';
+import { useProfile, useStoreValue, store } from '../hooks/useStore';
+import {
+  activity,
+  applications as applicationsApi,
+  connections,
+  matching,
+  notifications as notificationsApi,
+} from '../services/api';
+import { PageHeader } from '../components/common/PageHeader';
+import { SectionCard } from '../components/common/Card';
+import { StatTile } from '../components/common/StatTile';
+import { MatchMeter } from '../components/common/MatchMeter';
+import { Avatar } from '../components/common/Avatar';
+import { Badge, StatusBadge } from '../components/common/Badge';
+import { Button } from '../components/common/Button';
+import { IconButton } from '../components/common/IconButton';
+import { EmptyState } from '../components/common/EmptyState';
+import { formatDay, timeAgo } from '../utils/format';
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const { user } = useAuth();
-  
-  const [profile, setProfile] = useState(null);
-  const [recommended, setRecommended] = useState(null);
-  const [pendingRequests, setPendingRequests] = useState(null);
-  const [notifications, setNotifications] = useState(null);
-  const [featuredProjects, setFeaturedProjects] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  
-  useEffect(() => {
-    const loadDashboardData = async () => {
-      setIsLoading(true);
-      setError('');
-      
-      try {
-        const [profileData, recommendedData, pendingData, notificationsData, projectsData] = await Promise.all([
-          developersService.getCurrentProfile(),
-          developersService.getRecommended(),
-          connectionsService.getPendingRequests(),
-          notificationsService.getNotifications({ limit: 4 }),
-          projectsService.getProjects({ featured: true, limit: 3 }),
-        ]);
-        
-        setProfile(profileData);
-        setRecommended(recommendedData);
-        setPendingRequests(pendingData);
-        setNotifications(notificationsData);
-        setFeaturedProjects(projectsData);
-      } catch (err) {
-        setError(err.message || 'Failed to load dashboard');
-      } finally {
-        setIsLoading(false);
-      }
+  const [busyRequest, setBusyRequest] = useState(null);
+
+  const profile = useProfile(user);
+
+  const data = useStoreValue(() => {
+    if (!user) return null;
+    const myApplications = applicationsApi.forUser(user.id);
+    const active = myApplications.filter((a) => !['rejected', 'withdrawn'].includes(a.status));
+    const interviews = myApplications.filter((a) => a.status === 'interview' && a.interview?.scheduledFor);
+    const topMatches = matching.forUser(user.id, { sort: 'match', perPage: 4 }).slice(0, 4);
+    return {
+      myApplications,
+      active,
+      interviews,
+      topMatches,
+      saved: store.getSavedJobIds(user.id),
+      requests: connections.pending(user.id),
+      unread: notificationsApi.list(user.id).filter((n) => !n.read).slice(0, 4),
+      feed: activity.forUser(user.id, 5),
     };
-    
-    loadDashboardData();
-  }, []);
-  
-  if (isLoading) {
-    return <DashboardSkeleton />;
+  }, [user]);
+
+  if (!user || !data) return null;
+
+  const firstName = user.name.split(' ')[0];
+
+  async function respond(requestId, accept) {
+    setBusyRequest(requestId);
+    await connections.respond(requestId, accept);
+    setBusyRequest(null);
   }
-  
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <div className="p-4 bg-[var(--color-error)]/10 border border-[var(--color-error)] rounded-lg">
-          <p className="text-[var(--color-error)]">Failed to load dashboard. Please try again.</p>
-        </div>
-      </div>
-    );
-  }
-  
-  const completionPercentage = profile?.completionPercentage || 0;
-  
+
   return (
-    <div className="dashboard-page space-y-7">
-      {/* Welcome Section */}
-      <div className="dashboard-hero flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
-            Welcome back, {user?.name || 'Developer'}!
-          </h1>
-          <p className="mb-0 text-[var(--color-text-secondary)]">
-            Here's what's happening with your developer journey
-          </p>
-        </div>
-        <Link to="/profile/edit">
-          <Button icon={Settings} variant="outline">
-            Edit Profile
-          </Button>
-        </Link>
+    <div>
+      <PageHeader
+        eyebrow={`Signed in as ${user.role}`}
+        title={`Welcome back, ${firstName}`}
+        description={user.headline}
+        actions={
+          <>
+            <Button to="/jobs" variant="outline" icon={ArrowRight} iconPosition="right">
+              Browse jobs
+            </Button>
+            <Button to="/matches" icon={Sparkles}>
+              See my matches
+            </Button>
+          </>
+        }
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile
+          label="Active applications"
+          value={data.active.length}
+          hint={`${data.myApplications.length} total submitted`}
+          icon={ClipboardList}
+        />
+        <StatTile
+          label="Interviews"
+          value={data.interviews.length}
+          hint={
+            data.interviews[0]?.interview?.scheduledFor
+              ? `Next ${formatDay(data.interviews[0].interview.scheduledFor, { withTime: true })}`
+              : 'None scheduled'
+          }
+          icon={CalendarClock}
+        />
+        <StatTile
+          label="Saved jobs"
+          value={data.saved.length}
+          hint={data.saved.length ? 'Ready to apply' : 'Bookmark to shortlist'}
+          icon={Bookmark}
+        />
+        <StatTile
+          label="Strong matches"
+          value={data.topMatches.filter((job) => job.match?.score >= 75).length}
+          hint="Scored from your profile skills"
+          icon={Sparkles}
+        />
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Link to="/projects/new">
-              <Button variant="outline" fullWidth icon={Plus} iconPosition="top">
-                Add Project
-              </Button>
-            </Link>
-            <Link to="/developers">
-              <Button variant="outline" fullWidth icon={Search} iconPosition="top">
-                Find Developers
-              </Button>
-            </Link>
-            <Link to="/jobs">
-              <Button variant="outline" fullWidth icon={Briefcase} iconPosition="top">
-                Browse Jobs
-              </Button>
-            </Link>
-            <Link to="/connections">
-              <Button variant="outline" fullWidth icon={Users} iconPosition="top">
-                My Connections
-              </Button>
-            </Link>
+      {profile.percent < 100 && (
+        <div className="mt-4 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                Profile is {profile.percent}% complete
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                Missing: {profile.missing.join(', ')}. Match scoring reads these fields, so an
+                incomplete profile scores lower than your skills warrant.
+              </p>
+            </div>
+            <Button to="/profile/edit" size="sm">
+              Finish profile
+            </Button>
           </div>
-        </CardContent>
-      </Card>
-      
-      {/* Profile Completion */}
-      {completionPercentage < 100 && (
-        <Card className="dashboard-completion" hover gradient animated>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] rounded-full opacity-20 blur-lg animate-pulse" />
-                  <Settings className="relative h-5 w-5 text-[var(--color-primary)]" />
-                </div>
-                <h3 className="font-semibold text-[var(--color-text-primary)]">
-                  Complete Your Profile
-                </h3>
-              </div>
-              <Badge variant="secondary" className="text-sm font-bold">{completionPercentage}%</Badge>
-            </div>
-            
-            {/* Enhanced progress bar */}
-            <div className="relative h-3 bg-[var(--color-gray-200)] rounded-full overflow-hidden mb-4 shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-accent)] to-[var(--color-secondary)] transition-all duration-700 ease-out relative rounded-full"
-                style={{ width: `${completionPercentage}%` }}
-              >
-                {/* Shimmer effect on progress bar */}
-                <div className="absolute inset-0 bg-gradient-shimmer animate-shimmer" />
-              </div>
-            </div>
-            
-            <Link to="/onboarding">
-              <Button size="sm" fullWidth variant="gradient" icon={ArrowRight} iconPosition="right">
-                Continue Setup
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-alt)]">
+            <div
+              className="h-full rounded-full bg-[var(--color-accent)]"
+              style={{ width: `${profile.percent}%` }}
+            />
+          </div>
+        </div>
       )}
-      
-      {/* Stats Overview */}
-      <div className="dashboard-stats grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {[
-          { 
-            icon: Users, 
-            value: profile?.connections || 0, 
-            label: 'Connections',
-            color: 'var(--color-primary)',
-            gradient: 'from-[var(--color-primary)] to-[var(--color-primary-light)]'
-          },
-          { 
-            icon: Code2, 
-            value: featuredProjects?.projects?.length || 0, 
-            label: 'Projects',
-            color: 'var(--color-secondary)',
-            gradient: 'from-[var(--color-secondary)] to-[var(--color-secondary-light)]'
-          },
-          { 
-            icon: Bell, 
-            value: notifications?.unreadCount || 0, 
-            label: 'Notifications',
-            color: 'var(--color-accent)',
-            gradient: 'from-[var(--color-accent)] to-[var(--color-accent-light)]'
-          },
-          { 
-            icon: Briefcase, 
-            value: 3, 
-            label: 'Job Matches',
-            color: 'var(--color-warning)',
-            gradient: 'from-[var(--color-warning)] to-[var(--color-warning-light)]'
-          }
-        ].map((stat, index) => (
-          <Card key={index} hover animated shadow="lg" className="dashboard-stat-card group/stat">
-            <CardContent className="text-center relative overflow-hidden">
-              {/* Background glow effect */}
-              <div 
-                className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-0 group-hover/stat:opacity-10 transition-opacity duration-300`} 
-              />
-              
-              {/* Icon with animation */}
-              <div className="relative mb-3">
-                <div 
-                  className="absolute inset-0 rounded-full blur-xl animate-pulse-soft"
-                  style={{ background: stat.color }}
-                />
-                <div className="relative inline-flex p-3 rounded-xl bg-gradient-to-br from-white/80 to-white/40 dark:from-white/10 dark:to-white/5 border border-white/20">
-                  <stat.icon 
-                    className="h-6 w-6 transition-transform group-hover/stat:scale-110 group-hover/stat:-translate-y-1" 
-                    style={{ color: stat.color }} 
-                  />
-                </div>
-              </div>
-              
-              {/* Value with counter animation */}
-              <div className="text-3xl font-bold text-[var(--color-text-primary)] mb-1 tracking-tight">
-                {stat.value}
-              </div>
-              <div className="text-sm text-[var(--color-text-secondary)] font-medium">{stat.label}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      
-      <div className="dashboard-panels grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {/* Pending Connection Requests */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Pending Requests</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <LoadingSkeleton variant="card" />
-            ) : pendingRequests?.requests?.length > 0 ? (
-              <div className="space-y-3">
-                {pendingRequests.requests.slice(0, 3).map((request) => (
-                  <div key={request.id} className="flex items-center gap-3 p-3 bg-[var(--color-gray-50)] rounded-lg">
-                    <Avatar size="sm" fallback={request.from?.name?.[0]} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                        {request.from?.name}
-                      </p>
-                      <p className="text-xs text-[var(--color-text-secondary)]">
-                        {request.from?.headline}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="success">
-                        Accept
-                      </Button>
-                      <Button size="sm" variant="ghost">
-                        Decline
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <Link to="/connections/requests">
-                  <Button variant="ghost" size="sm" fullWidth icon={ArrowRight} iconPosition="right">
-                    View All
-                  </Button>
-                </Link>
-              </div>
-            ) : (
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <SectionCard
+            title="Your applications"
+            description="Newest first, with the last thing that happened."
+            action={
+              data.myApplications.length > 0 && (
+                <Button to="/applications" variant="ghost" size="sm">
+                  View all
+                </Button>
+              )
+            }
+          >
+            {data.myApplications.length === 0 ? (
               <EmptyState
-                icon="default"
-                title="No pending requests"
-                description="You don't have any pending connection requests"
-              />
-            )}
-          </CardContent>
-        </Card>
-        
-        {/* Recommended Developers */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recommended Developers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <LoadingSkeleton variant="card" />
-            ) : recommended?.developers?.length > 0 ? (
-              <div className="space-y-3">
-                {recommended.developers.slice(0, 3).map((developer) => (
-                  <div key={developer.id} className="flex items-center gap-3 p-3 hover:bg-[var(--color-gray-50)] rounded-lg cursor-pointer transition-colors">
-                    <Avatar size="sm" fallback={developer.name?.[0]} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                        {developer.name}
-                      </p>
-                      <p className="text-xs text-[var(--color-text-secondary)]">
-                        {developer.headline}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline">
-                      Connect
-                    </Button>
-                  </div>
-                ))}
-                <Link to="/developers">
-                  <Button variant="ghost" size="sm" fullWidth icon={Search} iconPosition="right">
-                  Discover More
+                icon="jobs"
+                title="You have not applied to anything yet"
+                description="Matches are scored from your skills and preferences. Open one and send an application to see this list fill up."
+                action={
+                  <Button to="/jobs" size="sm">
+                    Find a role
                   </Button>
-                </Link>
-              </div>
-            ) : (
-              <EmptyState
-                icon="default"
-                title="No recommendations yet"
-                description="Connect with more developers to get personalized recommendations"
+                }
+                compact
               />
-            )}
-          </CardContent>
-        </Card>
-        
-        {/* Recent Notifications */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Notifications</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <LoadingSkeleton variant="card" />
-            ) : notifications?.notifications?.length > 0 ? (
-              <div className="space-y-3">
-                {notifications.notifications.slice(0, 4).map((notification) => (
-                  <div key={notification.id} className="p-3 hover:bg-[var(--color-gray-50)] rounded-lg cursor-pointer transition-colors">
-                    <p className="text-sm text-[var(--color-text-primary)]">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-                      {notification.createdAt}
-                    </p>
-                  </div>
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {data.myApplications.slice(0, 4).map((application) => (
+                  <li key={application.id}>
+                    <Link
+                      to={`/applications/${application.id}`}
+                      className="flex items-start gap-3 py-3 transition-colors hover:bg-[var(--color-surface-alt)] -mx-3 px-3 rounded-[var(--radius-control)]"
+                    >
+                      <Avatar name={application.company?.name ?? 'DevConnect'} size="md" square />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                          {application.job?.title ?? 'Removed posting'}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-[var(--color-text-secondary)]">
+                          {application.company?.name} · applied {timeAgo(application.appliedAt)}
+                        </p>
+                        {application.timeline.length > 1 && (
+                          <p className="mt-1 line-clamp-1 text-xs text-[var(--color-text-tertiary)]">
+                            {lastNote(application)}
+                          </p>
+                        )}
+                      </div>
+                      <StatusBadge status={application.status} />
+                    </Link>
+                  </li>
                 ))}
-                <Link to="/notifications">
-                  <Button variant="ghost" size="sm" fullWidth icon={Bell} iconPosition="right">
-                    View All
-                  </Button>
-                </Link>
-              </div>
-            ) : (
-              <EmptyState
-                icon="default"
-                title="No notifications"
-                description="You're all caught up on notifications"
-              />
+              </ul>
             )}
-          </CardContent>
-        </Card>
-      </div>
-      
-      {/* Featured Projects */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Featured Projects</CardTitle>
-            <Link to="/projects">
-              <Button variant="ghost" size="sm">
-                View All
+          </SectionCard>
+
+          <SectionCard
+            title="Best matches right now"
+            description="Deterministic scores from required skills, preferred skills, level and work mode."
+            action={
+              <Button to="/matches" variant="ghost" size="sm">
+                All matches
               </Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <LoadingSkeleton variant="card" />
-              <LoadingSkeleton variant="card" />
-              <LoadingSkeleton variant="card" />
-            </div>
-          ) : featuredProjects?.projects?.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {featuredProjects.projects.slice(0, 3).map((project) => (
-                <Card key={project.id} hover>
-                  <CardContent className="pt-4">
-                    <h3 className="font-semibold text-[var(--color-text-primary)] mb-1">
-                      {project.title}
-                    </h3>
-                    <p className="text-sm text-[var(--color-text-secondary)] mb-3 line-clamp-2">
-                      {project.description}
-                    </p>
-                    <div className="flex gap-2 mb-3">
-                      {project.tags?.slice(0, 3).map((tag) => (
-                        <Badge key={tag} variant="outline" size="sm">
-                          {tag}
+            }
+          >
+            {data.topMatches.length === 0 ? (
+              <EmptyState
+                icon="search"
+                title="No scored jobs yet"
+                description="Add at least three skills to your profile and matches will start ranking the live postings."
+                action={
+                  <Button to="/profile/edit" size="sm">
+                    Add skills
+                  </Button>
+                }
+                compact
+              />
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {data.topMatches.map((job) => (
+                  <li key={job.id} className="flex items-start gap-3 py-3">
+                    <Avatar name={job.company?.name ?? job.title} size="md" square />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/jobs/${job.id}`}
+                        className="text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-accent)]"
+                      >
+                        {job.title}
+                      </Link>
+                      <p className="mt-0.5 truncate text-xs text-[var(--color-text-secondary)]">
+                        {job.company?.name} · {job.location} · {job.experienceLevel}
+                      </p>
+                      <MatchMeter match={job.match} className="mt-2 max-w-[16rem]" />
+                    </div>
+                    <div className="hidden shrink-0 gap-1 sm:flex">
+                      {job.match.missingSkills.slice(0, 2).map((skill) => (
+                        <Badge key={skill} tone="warning">
+                          {skill}
                         </Badge>
                       ))}
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-[var(--color-text-secondary)]">
-                      <span>★ {project.stars}</span>
-                      <span>⑂ {project.forks}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+        </div>
+
+        <div className="space-y-4">
+          <SectionCard
+            title="Connection requests"
+            action={
+              <Button to="/network" variant="ghost" size="sm">
+                Network
+              </Button>
+            }
+          >
+            {data.requests.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                No pending requests. Discover people through{' '}
+                <Link to="/network" className="text-[var(--color-accent)] hover:underline">
+                  Network
+                </Link>
+                .
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {data.requests.slice(0, 3).map((request) => (
+                  <li key={request.id} className="flex items-start gap-3">
+                    <Avatar name={request.user.name} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        to={`/developers/${request.user.id}`}
+                        className="block truncate text-sm font-medium text-[var(--color-text-primary)] hover:text-[var(--color-accent)]"
+                      >
+                        {request.user.name}
+                      </Link>
+                      <p className="truncate text-xs text-[var(--color-text-secondary)]">
+                        {request.user.headline}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                        {timeAgo(request.requestedAt)}
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon="default"
-              title="No featured projects"
-              description="Check back later for featured projects from the community"
-            />
-          )}
-        </CardContent>
-      </Card>
-      
+                    <div className="flex shrink-0 gap-1">
+                      <IconButton
+                        icon={Check}
+                        label={`Accept ${request.user.name}`}
+                        onClick={() => respond(request.id, true)}
+                        disabled={busyRequest === request.id}
+                      />
+                      <IconButton
+                        icon={X}
+                        label={`Decline ${request.user.name}`}
+                        onClick={() => respond(request.id, false)}
+                        disabled={busyRequest === request.id}
+                      />
+                    </div>
+                  </li>
+                ))}
+                {data.requests.length > 3 && (
+                  <li>
+                    <Button to="/network" variant="ghost" size="sm" icon={UserPlus}>
+                      {data.requests.length - 3} more
+                    </Button>
+                  </li>
+                )}
+              </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard
+            title="Unread notifications"
+            action={
+              <Button to="/notifications" variant="ghost" size="sm" icon={Bell}>
+                Open
+              </Button>
+            }
+          >
+            {data.unread.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Nothing unread. Activity on your applications and requests lands here.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {data.unread.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(item.href)}
+                      className="w-full text-left"
+                    >
+                      <p className="text-sm font-medium leading-snug text-[var(--color-text-primary)]">
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-[var(--color-text-secondary)]">
+                        {item.body}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                        {timeAgo(item.createdAt)}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Recent profile activity">
+            {data.feed.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                Your profile has no recorded activity yet.
+              </p>
+            ) : (
+              <ul className="space-y-2.5">
+                {data.feed.map((entry) => (
+                  <li key={entry.id} className="flex gap-2.5 text-sm">
+                    <span
+                      className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]"
+                      aria-hidden
+                    />
+                    <span className="min-w-0">
+                      <span className="text-[var(--color-text-primary)]">{entry.text}</span>{' '}
+                      <span className="block text-xs text-[var(--color-text-tertiary)]">
+                        {timeAgo(entry.at)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionCard>
+        </div>
+      </div>
     </div>
   );
 }
+
+function lastNote(application) {
+  const previous = application.timeline[application.timeline.length - 2];
+  const latest = application.timeline[application.timeline.length - 1];
+  return latest?.note || previous?.note
+    ? `${store.statusLabel(latest.status)}: ${latest.note ?? previous.note}`
+    : `Moved to ${store.statusLabel(latest?.status ?? application.status)}`;
+}
+
+export default Dashboard;

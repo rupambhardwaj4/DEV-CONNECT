@@ -1,164 +1,208 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../../context';
-import { Input, Button, Card, CardContent, Logo } from '../../components/common';
-import { AlertCircle } from 'lucide-react';
-import { authService } from '../../services/auth';
+import { homePathFor } from '../../routes/ProtectedRoute';
+import { AuthNote, AuthShell } from './AuthShell';
+import { Badge, Button, IconButton, TextInput, ValidationError } from '../../components/common';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** ProtectedRoute hands us the path the visitor wanted; tolerate both string and location shapes. */
+function resolveTarget(state) {
+  const from = state?.from;
+  if (typeof from === 'string' && from.startsWith('/')) return from;
+  if (from?.pathname) return from.pathname;
+  return null;
+}
 
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
-  
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  });
-  
+  const { login, loginAsDemo, demoAccounts, error: sessionError } = useAuth();
+
+  const intended = resolveTarget(location.state);
+  const resetFor = location.state?.resetFor;
+
+  const [form, setForm] = useState({ email: resetFor ?? '', password: '' });
   const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [apiError, setApiError] = useState('');
-  
-  const from = location.state?.from?.pathname || '/';
-  
-  const validateForm = () => {
-    const newErrors = {};
-    
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
-    }
-    
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const [formError, setFormError] = useState(null);
+  const [reveal, setReveal] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [demoPending, setDemoPending] = useState(null);
+
+  const update = (field) => (event) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+    setFormError(null);
   };
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setApiError('');
-    
-    if (!validateForm()) {
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      const response = await authService.login(formData);
-      login(response.user, response.token);
-      navigate(from, { replace: true });
-    } catch (error) {
-      setApiError(error.message || 'Login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error for this field when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-    setApiError('');
-  };
-  
+
+  function validate() {
+    const next = {};
+    if (!form.email.trim()) next.email = 'Enter the email on your account.';
+    else if (!EMAIL_RE.test(form.email.trim())) next.email = 'That does not look like an email address.';
+    if (!form.password) next.password = 'Enter your password.';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!validate()) return;
+    setPending(true);
+    setFormError(null);
+    const result = await login({ email: form.email.trim(), password: form.password, remember });
+    setPending(false);
+    if (result.ok) navigate(intended ?? homePathFor(result.user.role), { replace: true });
+    else setFormError(result.error);
+  }
+
+  async function handleDemo(account) {
+    setDemoPending(account.userId);
+    setFormError(null);
+    const result = await loginAsDemo(account);
+    setDemoPending(null);
+    if (result.ok) navigate(intended ?? homePathFor(result.user.role), { replace: true });
+    else setFormError(result.error);
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)] py-12 px-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="pt-8 pb-8">
-          <div className="text-center mb-8">
-            <div className="mb-4">
-              <Logo size="lg" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-              Welcome back
-            </h1>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              Sign in to your DevConnect account
-            </p>
-          </div>
-          
-          {apiError && (
-            <div className="mb-4 p-3 bg-[var(--color-error)]/10 border border-[var(--color-error)] rounded-lg flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-[var(--color-error)] flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-[var(--color-error)]">{apiError}</p>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              type="email"
-              name="email"
-              label="Email"
-              placeholder="you@example.com"
-              value={formData.email}
-              onChange={handleChange}
-              error={errors.email}
-              disabled={isLoading}
-              autoComplete="email"
-              required
+    <AuthShell
+      title="Sign in"
+      subtitle="Sign in to your account, or open a sample profile below to look around."
+      footer={
+        <>
+          New here?{' '}
+          <Link to="/register" className="font-medium text-[var(--color-accent)] hover:underline">
+            Create an account
+          </Link>
+        </>
+      }
+      aside={
+        <AuthNote>
+          DevConnect keeps your profile, applications and connections in one place. Explore a sample
+          account with one click, or create your own to start from an empty workspace.
+        </AuthNote>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-tertiary)]">
+          Explore an account
+        </p>
+        {demoAccounts.map((account) => (
+          <button
+            key={account.userId}
+            type="button"
+            onClick={() => handleDemo(account)}
+            disabled={pending || demoPending !== null}
+            className="group flex w-full items-start gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left transition-colors hover:border-[var(--color-accent)] disabled:opacity-60"
+          >
+            <Badge tone={account.label === 'Recruiter' ? 'info' : 'accent'}>{account.label}</Badge>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-[var(--color-text-primary)]">
+                {account.email}
+              </span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+                {account.note}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="my-5 flex items-center gap-3">
+        <span className="h-px flex-1 bg-[var(--color-border)]" />
+        <span className="text-xs text-[var(--color-text-tertiary)]">or sign in manually</span>
+        <span className="h-px flex-1 bg-[var(--color-border)]" />
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        {resetFor && (
+          <p className="rounded-[var(--radius-control)] border border-[var(--color-success)]/40 bg-[var(--color-success-light)] px-3 py-2.5 text-sm text-[var(--color-success-dark)] dark:text-[var(--color-success)]">
+            Password updated for {resetFor}. Sign in with it now.
+          </p>
+        )}
+
+        {formError && (
+          <ValidationError className="text-sm">{formError}</ValidationError>
+        )}
+
+        {/* With a served session the API is the only thing that can say who is signed in, so
+            the reason it could not answer belongs on this screen. */}
+        {!formError && sessionError && (
+          <ValidationError className="text-sm">{sessionError}</ValidationError>
+        )}
+
+        <div>
+          <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+            Email
+          </label>
+          <TextInput
+            id="login-email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@company.com"
+            icon={Mail}
+            value={form.email}
+            onChange={update('email')}
+            invalid={Boolean(errors.email)}
+            disabled={pending}
+          />
+          <ValidationError>{errors.email}</ValidationError>
+        </div>
+
+        <div>
+          <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium text-[var(--color-text-secondary)]">
+            Password
+          </label>
+          <TextInput
+            id="login-password"
+            name="password"
+            type={reveal ? 'text' : 'password'}
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            icon={Lock}
+            value={form.password}
+            onChange={update('password')}
+            invalid={Boolean(errors.password)}
+            disabled={pending}
+            trailing={
+              <IconButton
+                type="button"
+                size="sm"
+                icon={reveal ? EyeOff : Eye}
+                label={reveal ? 'Hide password' : 'Show password'}
+                onClick={() => setReveal((prev) => !prev)}
+              />
+            }
+          />
+          <ValidationError>{errors.password}</ValidationError>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+              className="h-4 w-4 rounded border-[var(--color-border-strong)] accent-[var(--color-accent)]"
             />
-            
-            <Input
-              type="password"
-              name="password"
-              label="Password"
-              placeholder="••••••••"
-              value={formData.password}
-              onChange={handleChange}
-              error={errors.password}
-              disabled={isLoading}
-              autoComplete="current-password"
-              required
-            />
-            
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-                />
-                Remember me
-              </label>
-              <Link
-                to="/forgot-password"
-                className="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)]"
-              >
-                Forgot password?
-              </Link>
-            </div>
-            
-            <Button
-              type="submit"
-              fullWidth
-              size="lg"
-              loading={isLoading}
-              disabled={isLoading}
-            >
-              Sign in
-            </Button>
-          </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              Don't have an account?{' '}
-              <Link
-                to="/register"
-                className="text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-medium"
-              >
-                Sign up
-              </Link>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+            Keep me signed in
+          </label>
+          <Link
+            to="/forgot-password"
+            className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-accent)]"
+          >
+            Forgot password?
+          </Link>
+        </div>
+
+        <Button type="submit" fullWidth size="lg" loading={pending}>
+          Sign in
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

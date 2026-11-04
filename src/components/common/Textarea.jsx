@@ -1,59 +1,28 @@
-import { useId } from 'react';
+import { forwardRef } from 'react';
 import { cn } from '../../utils/cn';
 
-export function Textarea({
-  label,
-  error,
-  helperText,
-  disabled = false,
-  fullWidth = false,
-  rows = 4,
-  className = '',
-  id,
-  ...props
-}) {
-  const generatedId = useId();
-  const textareaId = id || `textarea-${generatedId}`;
-  
-  const baseStyles = 'block w-full rounded-lg border px-3 py-2 text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed resize-vertical';
-  
-  const normalStyles = 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]';
-  
-  const errorStyles = 'border-[var(--color-error)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-error)] focus:ring-[var(--color-error)]';
-  
-  const textareaStyles = cn(
-    baseStyles,
-    error ? errorStyles : normalStyles,
-    fullWidth && 'w-full',
-    className
-  );
-  
+/** Bare textarea. Wrap in <Field> for label/hint/error wiring. */
+export const Textarea = forwardRef(function Textarea(
+  { className = '', invalid = false, rows = 4, ...props },
+  ref,
+) {
   return (
-    <div className={fullWidth ? 'w-full' : ''}>
-      {label && (
-        <label
-          htmlFor={textareaId}
-          className="block mb-1.5 text-sm font-medium text-[var(--color-text-primary)]"
-        >
-          {label}
-        </label>
+    <textarea
+      ref={ref}
+      rows={rows}
+      aria-invalid={invalid || undefined}
+      className={cn(
+        'w-full resize-y rounded-[var(--radius-control)] border bg-[var(--color-surface)] px-3 py-2.5',
+        'text-sm leading-relaxed text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)]',
+        'transition-colors focus:outline-none focus:ring-2',
+        'focus:ring-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] focus:border-[var(--color-accent)]',
+        'disabled:cursor-not-allowed disabled:bg-[var(--color-surface-alt)]',
+        invalid
+          ? 'border-[var(--color-error)]'
+          : 'border-[var(--color-border)] hover:border-[var(--color-border-strong)]',
+        className,
       )}
-      
-      <textarea
-        id={textareaId}
-        rows={rows}
-        disabled={disabled}
-        className={textareaStyles}
-        {...props}
-      />
-      
-      {error && (
-        <p className="mt-1 text-sm text-[var(--color-error)]">{error}</p>
-      )}
-      
-      {helperText && !error && (
-        <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">{helperText}</p>
-      )}
-    </div>
+      {...props}
+    />
   );
-}
+});

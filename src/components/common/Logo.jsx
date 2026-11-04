@@ -1,72 +1,52 @@
 import { cn } from '../../utils/cn';
 
+/**
+ * Brand mark: a solid navy tile with the connection glyph knocked out in the on-primary
+ * ink, and a two-tone wordmark. No gradient fills and no glow — a gradient tile rendered
+ * blank wherever the paint server failed to resolve, which made the mark invisible on
+ * light surfaces.
+ */
 export function Logo({ size = 'md', showTagline = false, className = '' }) {
   const sizes = {
-    sm:  { icon: 'w-6 h-6',   text: 'text-base',  tagline: 'text-[10px]' },
-    md:  { icon: 'w-8 h-8',   text: 'text-xl',    tagline: 'text-xs' },
-    lg:  { icon: 'w-10 h-10', text: 'text-2xl',   tagline: 'text-sm' },
-    xl:  { icon: 'w-12 h-12', text: 'text-3xl',   tagline: 'text-base' },
+    sm:  { icon: 'h-6 w-6',   text: 'text-base',  tagline: 'text-[10px]' },
+    md:  { icon: 'h-8 w-8',   text: 'text-xl',    tagline: 'text-xs' },
+    lg:  { icon: 'h-10 w-10', text: 'text-2xl',   tagline: 'text-sm' },
+    xl:  { icon: 'h-12 w-12', text: 'text-3xl',   tagline: 'text-base' },
   };
 
   const { icon, text, tagline } = sizes[size];
 
   return (
     <div className={cn('flex items-center gap-2.5 select-none', className)}>
-      {/* Icon mark */}
       <div
         className={cn(
           icon,
-          'rounded-xl flex items-center justify-center flex-shrink-0',
-          'shadow-[0_4px_12px_rgb(99_102_241/.35)]',
+          'flex shrink-0 items-center justify-center rounded-[var(--radius-md)]',
+          'bg-[var(--color-primary)] text-[var(--color-text-on-primary)]',
         )}
-        style={{
-          background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 55%, #06b6d4 100%)',
-        }}
       >
-        <svg
-          width="56%"
-          height="56%"
-          viewBox="0 0 20 20"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Two interlinked nodes forming a "connect" motif */}
-          <circle cx="5" cy="10" r="2.5" fill="white" fillOpacity=".95" />
-          <circle cx="15" cy="10" r="2.5" fill="white" fillOpacity=".95" />
-          <circle cx="10" cy="4" r="2" fill="white" fillOpacity=".7" />
-          <circle cx="10" cy="16" r="2" fill="white" fillOpacity=".7" />
-          <line x1="7.2" y1="9.2" x2="8.4" y2="5.4"  stroke="white" strokeWidth="1.3" strokeOpacity=".8" strokeLinecap="round" />
-          <line x1="12.8" y1="9.2" x2="11.6" y2="5.4" stroke="white" strokeWidth="1.3" strokeOpacity=".8" strokeLinecap="round" />
-          <line x1="7.2" y1="10.8" x2="8.4" y2="14.6" stroke="white" strokeWidth="1.3" strokeOpacity=".8" strokeLinecap="round" />
-          <line x1="12.8" y1="10.8" x2="11.6" y2="14.6" stroke="white" strokeWidth="1.3" strokeOpacity=".8" strokeLinecap="round" />
-          <line x1="7.5" y1="10" x2="12.5" y2="10" stroke="white" strokeWidth="1.3" strokeOpacity=".6" strokeLinecap="round" />
+        <svg viewBox="0 0 160 160" className="h-full w-full" role="img" aria-label="DevConnect icon">
+          <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="58,54 32,80 58,106" strokeWidth="10" />
+            <polyline points="102,54 128,80 102,106" strokeWidth="10" />
+            <line x1="68" y1="80" x2="92" y2="80" strokeWidth="5" />
+          </g>
+          <circle cx="68" cy="80" r="8" fill="currentColor" />
+          <circle cx="92" cy="80" r="8" fill="currentColor" />
         </svg>
       </div>
 
-      {/* Wordmark */}
       <div className="flex flex-col leading-none">
         <span className={cn(text, 'font-extrabold tracking-tight leading-none')}>
           <span className="text-[var(--color-text-primary)]">Dev</span>
-          <span
-            style={{
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}
-          >
-            Connect
-          </span>
+          <span className="text-[var(--color-accent)]">Connect</span>
         </span>
         {showTagline && (
           <span
-            className={cn(tagline, 'font-bold tracking-[0.12em] uppercase mt-0.5')}
-            style={{
-              background: 'linear-gradient(135deg, #6366f1, #06b6d4)',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
-            }}
+            className={cn(
+              tagline,
+              'mt-0.5 font-bold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]',
+            )}
           >
             CODE · CONNECT · CAREER
           </span>
@@ -75,3 +55,5 @@ export function Logo({ size = 'md', showTagline = false, className = '' }) {
     </div>
   );
 }
+
+export default Logo;

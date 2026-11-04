@@ -1,86 +1,41 @@
 import { cn } from '../../utils/cn';
 
+/**
+ * The only elevation rule in the app: surface + 1px border, and one shadow step for
+ * genuinely raised content. No gradient borders, no glass, no shimmer overlays.
+ */
 export function Card({
   children,
   className = '',
   hover = false,
   padding = 'md',
-  shadow = 'md',
-  gradient = false,
-  glass = false,
-  animated = true,
+  as: Component = 'div',
   ...props
-}) {
-  const baseStyles = 'rounded-2xl border transition-all duration-300 relative overflow-hidden';
-  
-  const paddingStyles = {
-    none: '',
-    sm: 'p-3',
-    md: 'p-4',
-    lg: 'p-6',
-    xl: 'p-8',
-  };
-  
-  const shadowStyles = {
-    none: '',
-    sm: 'shadow-sm',
-    md: 'shadow-md',
-    lg: 'shadow-lg hover:shadow-xl',
-    xl: 'shadow-xl hover:shadow-2xl',
-  };
-  
-  // Gradient border effect on hover
-  const gradientBorder = gradient
-    ? 'before:absolute before:inset-0 before:rounded-2xl before:p-[1px] before:bg-gradient-to-r before:from-[var(--color-primary)] before:to-[var(--color-accent)] before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-300'
-    : '';
-  
-  // Glass morphism effect for dark mode
-  const glassEffect = glass
-    ? 'backdrop-blur-xl bg-white/5 border-white/10'
-    : 'bg-[var(--color-surface)] border-[var(--color-border)]';
-  
-  const hoverStyles = hover
-    ? 'hover:shadow-lg hover:-translate-y-1 hover:border-[var(--color-border-hover)] cursor-pointer group/card'
-    : '';
-  
-  // Animated entrance
-  const animatedClass = animated ? 'animate-fade-up' : '';
-  
-  const cardStyles = cn(
-    baseStyles,
-    glassEffect,
-    paddingStyles[padding],
-    shadowStyles[shadow],
-    gradientBorder,
-    hoverStyles,
-    animatedClass,
-    className
-  );
-  
+}) {  const paddingStyles = { none: '', sm: 'p-3', md: 'p-4', lg: 'p-5', xl: 'p-6' };
+
   return (
-    <div className={cardStyles} {...props}>
-      {/* Shimmer overlay on hover */}
-      {hover && (
-        <div className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-500 pointer-events-none overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/card:translate-x-full animate-shimmer" />
-        </div>
+    <Component
+      className={cn(
+        'rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]',
+        paddingStyles[padding],
+        hover &&
+          'transition-[border-color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px hover:border-[var(--color-border-strong)] hover:shadow-[var(--shadow-md)]',
+        className,
       )}
+      {...props}
+    >
       {children}
-    </div>
+    </Component>
   );
 }
 
 export function CardHeader({ children, className = '' }) {
-  return (
-    <div className={cn('mb-4 animate-slide-down', className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn('mb-3', className)}>{children}</div>;
 }
 
 export function CardTitle({ children, className = '' }) {
   return (
-    <h3 className={cn('text-lg font-semibold text-[var(--color-text-primary)] tracking-tight', className)}>
+    <h3 className={cn('text-base font-semibold tracking-tight text-[var(--color-text-primary)]', className)}>
       {children}
     </h3>
   );
@@ -88,24 +43,78 @@ export function CardTitle({ children, className = '' }) {
 
 export function CardDescription({ children, className = '' }) {
   return (
-    <p className={cn('text-sm text-[var(--color-text-secondary)] mt-1 leading-relaxed', className)}>
+    <p className={cn('mt-0.5 text-sm leading-relaxed text-[var(--color-text-secondary)]', className)}>
       {children}
     </p>
   );
 }
 
 export function CardContent({ children, className = '' }) {
-  return (
-    <div className={cn('animate-fade-in', className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn(className)}>{children}</div>;
 }
 
 export function CardFooter({ children, className = '' }) {
   return (
-    <div className={cn('mt-4 pt-4 border-t border-[var(--color-border)] animate-slide-up', className)}>
-      {children}
+    <div className={cn('mt-4 border-t border-[var(--color-border)] pt-4', className)}>{children}</div>
+  );
+}
+
+/**
+ * Card with a standard header row: title, one-line description, and a right-aligned
+ * action. Nearly every panel in the app is this shape, so the shape lives once.
+ */
+export function SectionCard({
+  title,
+  description,
+  action,
+  children,
+  footer,
+  className = '',
+  bodyClassName = '',
+  padding = 'md',
+  ...props
+}) {
+  const paddingStyles = { none: '', sm: 'p-3', md: 'p-4', lg: 'p-5' };
+  return (
+    <section
+      className={cn(
+        'min-w-0 rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)]',
+        className,
+      )}
+      {...props}
+    >
+      {(title || action) && (
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+          <div className="min-w-0">
+            {title && (
+              <h2 className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)]">{title}</h2>
+            )}
+            {description && (
+              <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-tertiary)]">{description}</p>
+            )}
+          </div>
+          {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+        </header>
+      )}
+      <div className={cn(paddingStyles[padding], bodyClassName)}>{children}</div>
+      {footer && (
+        <div className="border-t border-[var(--color-border)] px-4 py-3">{footer}</div>
+      )}
+    </section>
+  );
+}
+
+/** Placeholder row inside a list card — keeps empty state in context instead of full-page. */
+export function EmptyRow({ icon: Icon, children, className = '' }) {
+  return (
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--color-border)] px-4 py-8 text-center',
+        className,
+      )}
+    >
+      {Icon && <Icon aria-hidden className="h-5 w-5 text-[var(--color-text-tertiary)]" />}
+      <p className="text-sm text-[var(--color-text-secondary)]">{children}</p>
     </div>
   );
 }

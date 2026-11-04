@@ -1,68 +1,40 @@
-import { useId } from 'react';
+import { forwardRef } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
 
-export function Select({
-  label,
-  error,
-  helperText,
-  disabled = false,
-  fullWidth = false,
-  options = [],
-  className = '',
-  id,
-  ...props
-}) {
-  const generatedId = useId();
-  const selectId = id || `select-${generatedId}`;
-  
-  const baseStyles = 'block w-full rounded-lg border px-3 py-2 text-sm transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed';
-  
-  const normalStyles = 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-primary)] focus:ring-[var(--color-primary)]';
-  
-  const errorStyles = 'border-[var(--color-error)] bg-[var(--color-surface)] text-[var(--color-text-primary)] focus:border-[var(--color-error)] focus:ring-[var(--color-error)]';
-  
-  const selectStyles = cn(
-    baseStyles,
-    error ? errorStyles : normalStyles,
-    fullWidth && 'w-full',
-    className
-  );
-  
+/** Bare native select — native behaviour on phones beats a custom menu. */
+export const Select = forwardRef(function Select(
+  { className = '', invalid = false, children, options, ...props },
+  ref,
+) {
   return (
-    <div className={fullWidth ? 'w-full' : ''}>
-      {label && (
-        <label
-          htmlFor={selectId}
-          className="block mb-1.5 text-sm font-medium text-[var(--color-text-primary)]"
-        >
-          {label}
-        </label>
-      )}
-      
+    <div className="relative">
       <select
-        id={selectId}
-        disabled={disabled}
-        className={selectStyles}
+        ref={ref}
+        aria-invalid={invalid || undefined}
+        className={cn(
+          'h-10 w-full appearance-none rounded-[var(--radius-control)] border bg-[var(--color-surface)] pl-3 pr-9',
+          'text-sm text-[var(--color-text-primary)] transition-colors',
+          'focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--color-accent)_45%,transparent)] focus:border-[var(--color-accent)]',
+          'disabled:cursor-not-allowed disabled:bg-[var(--color-surface-alt)]',
+          invalid
+            ? 'border-[var(--color-error)]'
+            : 'border-[var(--color-border)] hover:border-[var(--color-border-strong)]',
+          className,
+        )}
         {...props}
       >
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-            disabled={option.disabled}
-          >
+        {(options ?? []).map((option) => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>
             {option.label}
           </option>
         ))}
+        {children}
       </select>
-      
-      {error && (
-        <p className="mt-1 text-sm text-[var(--color-error)]">{error}</p>
-      )}
-      
-      {helperText && !error && (
-        <p className="mt-1 text-sm text-[var(--color-text-tertiary)]">{helperText}</p>
-      )}
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-tertiary)]"
+      />
     </div>
   );
-}
+});

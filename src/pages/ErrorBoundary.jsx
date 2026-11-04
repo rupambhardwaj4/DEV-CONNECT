@@ -1,11 +1,12 @@
-import { Component, useState, useEffect } from 'react';
+import { Component } from 'react';
 import { Button } from '../components/common';
-import { RefreshCw, Home, ArrowLeft, Bug, Copy, AlertTriangle } from 'lucide-react';
+import { STORAGE_KEYS } from '../lib/storage';
+import { RefreshCw, Home, Bug, Copy, AlertTriangle, RotateCcw } from 'lucide-react';
 
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null, retryCount: 0 };
+    this.state = { hasError: false, error: null, errorInfo: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -26,12 +27,19 @@ export class ErrorBoundary extends Component {
   }
 
   handleRetry = () => {
-    this.setState(prev => ({ 
-      hasError: false, 
-      error: null, 
-      errorInfo: null,
-      retryCount: prev.retryCount + 1 
-    }));
+    // Full reload, not an in-place re-render: a data-driven crash re-throws against the
+    // same snapshot otherwise. Reloading lets the store re-run its schema/completeness
+    // check and re-seed if the persisted payload is the culprit.
+    window.location.reload();
+  };
+
+  handleReset = () => {
+    try {
+      window.localStorage.removeItem(STORAGE_KEYS.SNAPSHOT_KEY);
+    } catch {
+      /* if storage is unreadable the reload will fall back to a fresh seed anyway */
+    }
+    window.location.href = '/';
   };
 
   handleCopyError = () => {
@@ -43,55 +51,38 @@ export class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
-      const isRetryable = this.state.retryCount < 3;
-      
       return (
         <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)] p-4" role="alert" aria-live="assertive">
           <div className="w-full max-w-md text-center">
             <div className="mb-6">
               <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-full bg-[var(--color-error)]/10">
                 <AlertTriangle className="h-10 w-10 text-[var(--color-error)]" />
-                {this.state.retryCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[var(--color-error)] text-white text-xs font-bold flex items-center justify-center">
-                    {this.state.retryCount}
-                  </span>
-                )}
               </div>
             </div>
-            
+
             <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
               Something went wrong
             </h1>
-            
+
             <p className="text-[var(--color-text-secondary)] mb-6 max-w-md mx-auto">
               We apologize for the inconvenience. An unexpected error has occurred while loading this page.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mb-6">
-              {isRetryable && (
-                <Button onClick={this.handleRetry} icon={RefreshCw} className="w-full sm:w-auto">
-                  Try Again
-                </Button>
-              )}
-              <Button variant="outline" onClick={() => window.location.href = '/'} icon={Home} className="w-full sm:w-auto">
+              <Button onClick={this.handleRetry} icon={RefreshCw} className="w-full sm:w-auto">
+                Try Again
+              </Button>
+              <Button variant="outline" onClick={this.handleReset} icon={RotateCcw} className="w-full sm:w-auto">
+                Reset workspace
+              </Button>
+              <Button variant="ghost" onClick={() => window.location.href = '/'} icon={Home} className="w-full sm:w-auto">
                 Go to Home
               </Button>
-              <Button variant="ghost" onClick={() => window.history.back()} icon={ArrowLeft} className="w-full sm:w-auto">
-                Go Back
-              </Button>
             </div>
-            
-            {this.state.retryCount >= 3 && (
-              <div className="p-4 bg-[var(--color-warning)]/10 border border-[var(--color-warning)] rounded-lg mb-4 text-left">
-                <div className="flex items-center gap-2 text-sm text-[var(--color-warning)] mb-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span className="font-medium">Multiple retries failed</span>
-                </div>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  This might be a persistent issue. Please try clearing your browser cache or contact support.
-                </p>
-              </div>
-            )}
+
+            <p className="text-xs text-[var(--color-text-tertiary)] mb-6">
+              If the page keeps failing, "Reset workspace" restores it to its original content.
+            </p>
             
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <details className="mt-6 text-left group">
@@ -127,29 +118,4 @@ export class ErrorBoundary extends Component {
 
     return this.props.children;
   }
-}
-
-// Hook for functional components to throw errors
-export function useErrorHandler() {
-  const [error, setError] = useState(null);
-  
-  const throwError = (err) => {
-    setError(err);
-    throw err;
-  };
-  
-  const clearError = () => setError(null);
-  
-  return { error, throwError, clearError };
-}
-
-// Higher-order component for wrapping components
-export function withErrorBoundary(WrappedComponent, fallbackProps = {}) {
-  return function WithErrorBoundary(props) {
-    return (
-      <ErrorBoundary {...fallbackProps}>
-        <WrappedComponent {...props} />
-      </ErrorBoundary>
-    );
-  };
 }

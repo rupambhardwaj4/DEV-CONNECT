@@ -1,5 +1,9 @@
 # DevConnect - Visual & Functional Improvements
 
+> **Superseded.** This document describes the 2026-10-15 visual pass (gradients, glassmorphism,
+> `SmartSearch`, `KeyboardShortcutsHelp`) that was later replaced by the flat navy/ivory token
+> system and the `CommandPalette`. For how the app works today, read `README.md`.
+
 This document outlines all the enhancements made to make DevConnect more beautiful and functional.
 
 ## 🎨 Visual Enhancements

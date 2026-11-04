@@ -1,0 +1,322 @@
+// DevConnect persistence — the developer module's data layer.
+//
+// Column shapes mirror src/types/index.js so a serialized row is byte-compatible with the
+// client's StoreSnapshot contract; the API never needs a translation table on the way back.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  developer
+  recruiter
+  superuser
+}
+
+enum Visibility {
+  public
+  connections
+  private
+}
+
+enum WorkMode {
+  remote
+  hybrid
+  onsite
+}
+
+enum JobType {
+  full_time
+  part_time
+  contract
+  internship
+}
+
+enum ExperienceLevel {
+  junior
+  mid
+  senior
+  lead
+  principal
+}
+
+enum JobStatus {
+  draft
+  published
+  closed
+}
+
+enum ApplicationStatus {
+  applied
+  under_review
+  interview
+  offer
+  rejected
+  withdrawn
+}
+
+enum ConnectionState {
+  pending
+  accepted
+  rejected
+}
+
+enum NotificationKind {
+  connection_request
+  connection_accepted
+  application_update
+  recruiter_activity
+  applied
+  system
+}
+
+enum Actor {
+  developer
+  recruiter
+  system
+}
+
+model Company {
+  id         String  @id
+  name       String
+  industry   String
+  size       String
+  location   String
+  website    String?
+  blurb      String
+  logoText   String? @map("logo_text")
+  recruiters User[]
+  jobs       Job[]
+
+  @@index([name])
+}
+
+model User {
+  id                String           @id
+  role              Role
+  name              String
+  email             String           @unique
+  passwordHash      String           @map("password_hash")
+  headline          String           @default("")
+  location          String           @default("")
+  avatar            String?
+  bio               String           @default("")
+  skills            String[]         @default([])
+  experienceLevel   ExperienceLevel? @map("experience_level")
+  yearsOfExperience Int?             @map("years_of_experience")
+  githubUsername    String?          @map("github_username")
+  website           String?
+  linkedIn          String?
+  twitter           String?
+  openTo            String?          @map("open_to")
+  resume            String?
+  emailVerified     Boolean          @default(false) @map("email_verified")
+  visibility        Visibility       @default(public)
+  notificationPrefs Json             @map("notification_prefs")
+  preferences       Json?
+  experience        Json             @default("[]")
+  education         Json             @default("[]")
+  companyId         String?          @map("company_id")
+  title             String?
+  createdAt         DateTime         @default(now()) @map("created_at")
+
+  company             Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  postedJobs          Job[]
+  applications        Application[]
+  notifications       Notification[]
+  repositories        Repository[]
+  projects            Project[]
+  savedJobs           SavedJob[]
+  savedCandidates     SavedCandidate[] @relation("SavedCandidateOwner")
+  savedAsCandidate    SavedCandidate[] @relation("SavedCandidateDeveloper")
+  sentConnections     Connection[]     @relation("ConnectionFrom")
+  receivedConnections Connection[]     @relation("ConnectionTo")
+  activity            ActivityEvent[]
+
+  @@index([role])
+  @@index([experienceLevel])
+  @@index([location])
+}
+
+model Job {
+  id               String          @id
+  title            String
+  companyId        String          @map("company_id")
+  recruiterId      String          @map("recruiter_id")
+  location         String
+  workMode         WorkMode
+  jobType          JobType         @map("job_type")
+  experienceLevel  ExperienceLevel @map("experience_level")
+  salary           Json?
+  requiredSkills   String[]        @default([]) @map("required_skills")
+  preferredSkills  String[]        @default([]) @map("preferred_skills")
+  description      String
+  responsibilities String[]        @default([])
+  status           JobStatus       @default(draft)
+  postedAt         DateTime        @default(now()) @map("posted_at")
+  applyDeadline    DateTime?       @map("apply_deadline")
+  isFeatured       Boolean         @default(false) @map("is_featured")
+
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  recruiter    User          @relation(fields: [recruiterId], references: [id], onDelete: Cascade)
+  applications Application[]
+  savedBy      SavedJob[]
+
+  @@index([status, postedAt])
+  @@index([recruiterId])
+  @@index([companyId])
+  @@index([requiredSkills])
+}
+
+model Application {
+  id        String            @id
+  jobId     String            @map("job_id")
+  userId    String            @map("user_id")
+  status    ApplicationStatus @default(applied)
+  appliedAt DateTime          @default(now()) @map("applied_at")
+  updatedAt DateTime          @default(now()) @map("updated_at")
+  coverNote String            @default("") @map("cover_note")
+  interview Json?
+
+  job    Job                @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events ApplicationEvent[]
+
+  // One application per developer per role: the duplicate rule the synopsis requires.
+  @@unique([jobId, userId])
+  @@index([userId, appliedAt])
+  @@index([jobId, status])
+}
+
+model ApplicationEvent {
+  id            String            @id @default(cuid())
+  applicationId String            @map("application_id")
+  status        ApplicationStatus
+  at            DateTime
+  by            Actor
+  note          String?
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, at])
+}
+
+model Connection {
+  id          String          @id
+  fromUserId  String          @map("from_user_id")
+  toUserId    String          @map("to_user_id")
+  state       ConnectionState @default(pending)
+  requestedAt DateTime        @default(now()) @map("requested_at")
+  respondedAt DateTime?       @map("responded_at")
+  message     String?
+
+  fromUser User @relation("ConnectionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("ConnectionTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, state])
+}
+
+model SavedJob {
+  userId  String   @map("user_id")
+  jobId   String   @map("job_id")
+  savedAt DateTime @default(now()) @map("saved_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jobId])
+}
+
+model SavedCandidate {
+  userId      String   @map("user_id")
+  developerId String   @map("developer_id")
+  savedAt     DateTime @default(now()) @map("saved_at")
+
+  user      User @relation("SavedCandidateOwner", fields: [userId], references: [id], onDelete: Cascade)
+  developer User @relation("SavedCandidateDeveloper", fields: [developerId], references: [id], onDelete: Cascade)
+
+  @@id([userId, developerId])
+}
+
+model Notification {
+  id        String           @id
+  userId    String           @map("user_id")
+  kind      NotificationKind
+  title     String
+  body      String           @default("")
+  href      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now()) @map("created_at")
+  relatedId String?          @map("related_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+}
+
+model Repository {
+  id            String   @id
+  userId        String   @map("user_id")
+  name          String
+  description   String   @default("")
+  language      String   @default("")
+  topics        String[] @default([])
+  stars         Int      @default(0)
+  forks         Int      @default(0)
+  watchers      Int      @default(0)
+  pushedAt      DateTime @map("pushed_at")
+  url           String
+  isPinned      Boolean  @default(false) @map("is_pinned")
+  contributions Int[]    @default([])
+  openIssues    Int?     @map("open_issues")
+  license       String?
+  defaultBranch String?  @map("default_branch")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isPinned])
+}
+
+model Project {
+  id       String   @id
+  userId   String   @map("user_id")
+  title    String
+  summary  String   @default("")
+  tags     String[] @default([])
+  url      String?
+  repoUrl  String?  @map("repo_url")
+  period   String?
+  featured Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, featured])
+}
+
+model ActivityEvent {
+  id       String   @id
+  actorId  String   @map("actor_id")
+  kind     String
+  targetId String   @map("target_id")
+  at       DateTime
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([at])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+
+  @@index([userId])
+}

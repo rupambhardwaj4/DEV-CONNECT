@@ -1,5 +1,63 @@
+import { NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 
+/** Bare spinner: the button's own label stays the accessible name. */
+function Pending({ size = 14 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className="animate-spin"
+    >
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const BASE =
+  'inline-flex items-center justify-center font-medium rounded-[var(--radius-control)] ' +
+  'transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out ' +
+  'focus-visible:outline-none focus-visible:ring-2 ' +
+  'focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)] ' +
+  'active:translate-y-px disabled:cursor-not-allowed disabled:opacity-55 disabled:active:translate-y-0';
+
+const VARIANTS = {
+  primary:
+    'bg-[var(--color-primary)] text-[var(--color-text-inverse)] shadow-[var(--shadow-xs)] ' +
+    'hover:bg-[var(--color-primary-hover)] hover:shadow-[var(--shadow-sm)] ' +
+    'focus-visible:ring-[var(--color-primary)]',
+  secondary:
+    'bg-[var(--color-accent)] text-[var(--color-text-inverse)] shadow-[var(--shadow-xs)] ' +
+    'hover:bg-[var(--color-accent-hover)] hover:shadow-[var(--shadow-sm)] ' +
+    'focus-visible:ring-[var(--color-accent)]',
+  outline:
+    'border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text-primary)] ' +
+    'hover:border-[var(--color-primary)] hover:bg-[var(--color-surface-alt)] ' +
+    'focus-visible:ring-[var(--color-primary)]',
+  ghost:
+    'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] ' +
+    'focus-visible:ring-[var(--color-border-strong)]',
+  danger:
+    'bg-[var(--color-error)] text-white hover:bg-[var(--color-error-dark)] focus-visible:ring-[var(--color-error)]',
+  link:
+    'text-[var(--color-primary)] underline-offset-4 hover:underline px-0 h-auto focus-visible:ring-[var(--color-accent)]',
+};
+
+const SIZES = {
+  xs: 'h-7 px-2 text-xs gap-1',
+  sm: 'h-8 px-3 text-sm gap-1.5',
+  md: 'h-9 px-3.5 text-sm gap-2',
+  lg: 'h-11 px-5 text-sm gap-2',
+};
+
+/**
+ * Button. Pass `to` for a navigation button — it renders a router link with button
+ * styling so no screen ever ships a button that goes nowhere.
+ */
 export function Button({
   children,
   variant = 'primary',
@@ -9,123 +67,54 @@ export function Button({
   fullWidth = false,
   icon: Icon,
   iconPosition = 'left',
+  to,
+  onClick,
   className = '',
+  type = 'button',
   ...props
 }) {
-  const base =
-    'inline-flex items-center justify-center font-semibold rounded-xl transition-all duration-200 ' +
-    'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[var(--color-surface)] ' +
-    'disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] relative overflow-hidden';
+  const classes = cn(
+    BASE,
+    VARIANTS[variant] ?? VARIANTS.primary,
+    SIZES[size] ?? SIZES.md,
+    fullWidth && 'w-full',
+    loading && 'cursor-wait opacity-75',
+    className,
+  );
 
-  const variants = {
-    primary:
-      'bg-[var(--color-primary)] text-white shadow-sm hover:shadow-md ' +
-      'hover:bg-[var(--color-primary-hover)] hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-primary)]',
-    secondary:
-      'bg-[var(--color-secondary)] text-white shadow-sm hover:shadow-md ' +
-      'hover:bg-[var(--color-secondary-hover)] hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-secondary)]',
-    accent:
-      'bg-[var(--color-accent)] text-white shadow-sm hover:shadow-md ' +
-      'hover:bg-[var(--color-accent-hover)] hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-accent)]',
-    gradient:
-      'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white ' +
-      'shadow-md hover:shadow-lg hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-primary)]',
-    glass:
-      'backdrop-blur-md bg-white/10 border border-white/20 text-[var(--color-text-primary)] ' +
-      'hover:bg-white/20 hover:border-white/30 hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-primary)]',
-    outline:
-      'border-2 border-[var(--color-border)] bg-[var(--color-surface)] ' +
-      'text-[var(--color-text-primary)] ' +
-      'hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] ' +
-      'hover:bg-[color-mix(in_srgb,var(--color-primary)_5%,var(--color-surface))] ' +
-      'hover:-translate-y-0.5 hover:shadow-sm ' +
-      'focus:ring-[var(--color-primary)]',
-    ghost:
-      'text-[var(--color-text-secondary)] ' +
-      'hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-text-primary)] hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-gray-400)]',
-    danger:
-      'bg-[var(--color-error)] text-white shadow-sm hover:shadow-md ' +
-      'hover:bg-[var(--color-error-dark)] hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-error)]',
-    success:
-      'bg-[var(--color-success)] text-white shadow-sm hover:shadow-md ' +
-      'hover:bg-[var(--color-success-dark)] hover:-translate-y-0.5 ' +
-      'focus:ring-[var(--color-success)]',
-  };
+  const content = (
+    <>
+      {loading && <Pending />}
+      {Icon && !loading && iconPosition === 'left' && (
+        <Icon aria-hidden className={size === 'lg' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+      )}
+      {children}
+      {Icon && !loading && iconPosition === 'right' && (
+        <Icon aria-hidden className={size === 'lg' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+      )}
+    </>
+  );
 
-  const sizes = {
-    sm: 'px-3 py-1.5 text-sm h-8 gap-1.5',
-    md: 'px-4 py-2 text-sm h-10 gap-2',
-    lg: 'px-6 py-3 text-base h-12 gap-2.5',
-  };
-
-  const isTopIcon = iconPosition === 'top';
+  if (to) {
+    return (
+      <NavLink
+        to={to}
+        className={classes}
+        aria-disabled={disabled || loading || undefined}
+        onClick={(event) => {
+          if (disabled || loading) event.preventDefault();
+          onClick?.(event);
+        }}
+        {...props}
+      >
+        {content}
+      </NavLink>
+    );
+  }
 
   return (
-    <button
-      className={cn(
-        base,
-        variants[variant],
-        sizes[size],
-        fullWidth && 'w-full',
-        loading && 'opacity-75 cursor-wait',
-        isTopIcon && 'flex-col gap-1 h-auto py-3',
-        className,
-        'group/button'
-      )}
-      disabled={disabled || loading}
-      {...props}
-    >
-      {/* Shimmer effect for loading state */}
-      {loading && (
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
-        </div>
-      )}
-
-      {/* Loading spinner with animation */}
-      {loading && (
-        <svg
-          className="animate-spin -ml-0.5 mr-2 h-4 w-4 relative z-10"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          aria-hidden
-        >
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          />
-        </svg>
-      )}
-
-      {/* Icon with bounce animation on hover */}
-      {Icon && (iconPosition === 'left' || isTopIcon) && !loading && (
-        <Icon
-          className={cn(
-            'flex-shrink-0 transition-transform group-hover/button:-translate-x-0.5',
-            isTopIcon ? 'h-5 w-5' : 'h-4 w-4',
-          )}
-          aria-hidden
-        />
-      )}
-
-      <span className="relative z-10">{children}</span>
-
-      {Icon && iconPosition === 'right' && !loading && (
-        <Icon 
-          className="ml-2 h-4 w-4 flex-shrink-0 transition-transform group-hover/button:translate-x-0.5" 
-          aria-hidden 
-        />
-      )}
+    <button type={type} className={classes} disabled={disabled || loading} onClick={onClick} {...props}>
+      {content}
     </button>
   );
 }

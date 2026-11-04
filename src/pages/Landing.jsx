@@ -1,531 +1,428 @@
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import {
-  Button, Card, CardContent, Badge, Avatar, Logo,
-} from '../components/common';
-import { Footer } from '../components/layout';
-import {
-  Users, Briefcase, Code2, Sparkles, ArrowRight,
-  CheckCircle2, Star, GitBranch, Zap, Globe,
-  TrendingUp, Shield, ChevronDown, Menu, X,
-  Play,
+  ArrowRight,
+  BookOpenCheck,
+  Briefcase,
+  Check,
+  GitCompareArrows,
+  Monitor,
+  Moon,
+  ScrollText,
+  Sun,
+  Users,
 } from 'lucide-react';
-import { useTheme } from '../context';
+import { useAuth, useTheme } from '../context';
+import { useStoreValue, store } from '../hooks/useStore';
+import { MATCH_WEIGHTS } from '../lib/matching';
+import { jobs } from '../services/api';
+import { Logo } from '../components/common/Logo';
+import { Button } from '../components/common/Button';
+import { Dropdown, DropdownItem, DropdownLabel } from '../components/common/Dropdown';
+import { ProgressBar } from '../components/common/ProgressBar';
+import { formatNumber, pluralize } from '../utils/format';
 
-/* ── Static Data ───────────────────────────────────────────── */
-const sampleDevelopers = [
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'Follow system', icon: Monitor },
+];
+
+/**
+ * Band thresholds mirror `scoreMatch` in src/lib/matching.js. They are not exported from
+ * there, so they are restated here rather than invented: strong >= 75, good >= 55, else fair.
+ */
+const BANDS = [
+  { label: 'Strong match', min: 75, max: 100 },
+  { label: 'Worth a look', min: 55, max: 74 },
+  { label: 'Weak overlap', min: 0, max: 54 },
+];
+
+const WEIGHT_COPY = {
+  required: 'Required skills you actually list. The biggest single lever on the score.',
+  preferred: 'Nice-to-have skills from the posting. Partial credit, proportionally.',
+  experience: 'How your level compares with the level the posting asks for.',
+  workMode: "Whether the posting's remote/hybrid/onsite setting is one you accept.",
+};
+
+const DEVELOPER_POINTS = [
   {
-    name: 'Sarah Chen',
-    role: 'Full Stack Developer',
-    location: 'San Francisco, CA',
-    skills: ['React', 'Node.js', 'TypeScript'],
-    avatar: 'SC',
-    stars: 142,
-    repos: 38,
-    color: '#6366f1',
+    icon: GitCompareArrows,
+    title: 'Ranked matches, not a feed',
+    body: 'Every open posting is scored against your skills, level and work-mode preferences, then sorted by that score with the reasons written out.',
+    to: '/matches',
+    cta: 'See matching',
   },
   {
-    name: 'Alex Johnson',
-    role: 'Frontend Engineer',
-    location: 'Berlin, Germany',
-    skills: ['Vue.js', 'GraphQL', 'Figma'],
-    avatar: 'AJ',
-    stars: 218,
-    repos: 52,
-    color: '#8b5cf6',
+    icon: ScrollText,
+    title: 'One application trail',
+    body: 'Apply from a posting and the application stays in one list: applied, under review, interview, offer, rejected, withdrawn.',
+    to: '/applications',
+    cta: 'See applications',
   },
   {
-    name: 'Maria Garcia',
-    role: 'Backend Developer',
-    location: 'London, UK',
-    skills: ['Python', 'Django', 'Postgres'],
-    avatar: 'MG',
-    stars: 97,
-    repos: 29,
-    color: '#06b6d4',
+    icon: BookOpenCheck,
+    title: 'A profile that says why',
+    body: 'Skills, experience, education, projects and preferences in one place, with a completeness check that names the fields recruiters read first.',
+    to: '/profile/edit',
+    cta: 'Edit a profile',
   },
 ];
 
-const features = [
-  {
-    icon: Users,
-    title: 'Developer Networking',
-    description:
-      'Build real professional relationships with developers across the globe. Discover peers who share your stack and ambitions.',
-    color: '#6366f1',
-  },
-  {
-    icon: Code2,
-    title: 'Project Showcase',
-    description:
-      'Link your GitHub, highlight your best work, and let your code speak for itself in front of recruiters and collaborators.',
-    color: '#8b5cf6',
-  },
+const RECRUITER_POINTS = [
   {
     icon: Briefcase,
-    title: 'Smart Job Discovery',
-    description:
-      'Get personalized job matches based on your skills, experience, and preferences — not just keyword searches.',
-    color: '#06b6d4',
+    title: 'Postings with real requirements',
+    body: 'Required and preferred skills, level, work mode and rate band — the same fields the matcher scores against, so a posting explains its own results.',
+    to: '/recruiter/jobs',
+    cta: 'See postings',
   },
   {
-    icon: Sparkles,
-    title: 'AI-Powered Matching',
-    description:
-      'Our intelligent recommendation engine surfaces the right opportunities and collaborators at the right time.',
-    color: '#f43f5e',
+    icon: ScrollText,
+    title: 'One pipeline per posting',
+    body: 'Move candidates through applied, screening, interview and offer, with a note and an interview slot on each transition.',
+    to: '/recruiter/applicants',
+    cta: 'See pipeline',
   },
   {
-    icon: Shield,
-    title: 'Verified Profiles',
-    description:
-      'Trust the profiles you see. Our verification system ensures authentic developer identities and honest portfolios.',
-    color: '#10b981',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Career Analytics',
-    description:
-      'Track your profile views, connection growth, and application pipeline with insightful, real-time analytics.',
-    color: '#f59e0b',
+    icon: Users,
+    title: 'Candidate search you can justify',
+    body: 'Filter developers by skill, level and location, save the ones worth revisiting, and see the match score beside each name.',
+    to: '/recruiter/candidates',
+    cta: 'See candidates',
   },
 ];
 
-const howItWorks = [
-  {
-    step: '01',
-    title: 'Build Your Profile',
-    description:
-      'Add your skills, experience, and GitHub projects. Tell your story the way you want developers and hiring teams to see it.',
-  },
-  {
-    step: '02',
-    title: 'Showcase Your Work',
-    description:
-      'Pin your best repositories, write project descriptions, and get automatically ranked by our quality signals.',
-  },
-  {
-    step: '03',
-    title: 'Connect & Grow',
-    description:
-      'Follow developers, request connections, and discover opportunities curated specifically for your unique profile.',
-  },
+const TRUST_ITEMS = [
+  'Every score is shown with the skills behind it, so a match is never a black box.',
+  'One profile drives both sides — what a developer sees and what a recruiter ranks on are the same numbers.',
+  'A posting is advice, not a gate: nothing auto-rejects a candidate it has not been tuned to.',
+  'Skills are read as data, not vibes — names are normalised so React, react and ReactJS mean one thing.',
 ];
 
-const testimonials = [
-  {
-    quote: "DevConnect helped me land my dream job at a startup I'd never have discovered otherwise. The matching is genuinely impressive.",
-    name: 'James Park',
-    role: 'Senior React Developer',
-    avatar: 'JP',
-  },
-  {
-    quote: "I built my whole professional network on DevConnect. It's the first platform where developers actually feel at home.",
-    name: 'Priya Nair',
-    role: 'Backend Engineer at Stripe',
-    avatar: 'PN',
-  },
-  {
-    quote: "The project showcase feature alone is worth it. My GitHub profile never looked this good to recruiters before.",
-    name: 'Lucas Müller',
-    role: 'Open Source Contributor',
-    avatar: 'LM',
-  },
+const CARE_ITEMS = [
+  'Sign up as a developer or a recruiter, and the workspace you land in is built for that job.',
+  'Your profile, applications and connections stay yours — export or remove them any time.',
+  'Notifications only fire on the events you turn on, grouped by what actually changed.',
+  'Search, filters and sorting run across the whole board, not just what someone decided to surface.',
 ];
 
-/* ── Component ──────────────────────────────────────────────── */
 export function Landing() {
-  const { theme, toggleTheme } = useTheme();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const h = () => setScrolled(window.scrollY > 10);
-    window.addEventListener('scroll', h, { passive: true });
-    return () => window.removeEventListener('scroll', h);
+  const { isAuthenticated } = useAuth();
+  const { theme, setTheme, reduceMotion } = useTheme();
+  const diagnostics = useStoreValue(() => {
+    const snapshot = store.getSnapshot();
+    const { counts, available } = store.storageDiagnostics();
+    return {
+      counts,
+      available,
+      developers: snapshot.users.filter((u) => u.role === 'developer').length,
+      recruiters: snapshot.users.filter((u) => u.role === 'recruiter').length,
+    };
   }, []);
+  const skillCount = useStoreValue(() => (jobs.facets().skills ?? []).length, []);
+
+  const { counts, available, developers, recruiters } = diagnostics;
+  const totalWeight = Object.values(MATCH_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+
+  const entrance = reduceMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.35, ease: 'easeOut' },
+      };
 
   return (
-    <div className="landing-shell min-h-screen bg-[var(--color-background)]">
-
-      {/* ══════════════════════════════════════════════════════
-          HEADER
-      ══════════════════════════════════════════════════════ */}
-      <header
-        className="landing-header sticky top-0 z-[var(--z-index-sticky)] border-b border-[var(--color-border)] transition-all duration-300"
-        style={{
-          boxShadow: scrolled ? '0 2px 20px rgb(0 0 0 / .07)' : 'none',
-        }}
-      >
-        <div className="container">
-          <div className="flex items-center justify-between h-16">
-
-            <Link to="/">
-              <Logo size="md" />
-            </Link>
-
-            <nav className="landing-nav hidden md:flex items-center gap-7">
-              {['Developers', 'Projects', 'Jobs'].map((name) => (
-                <Link
-                  key={name}
-                  to={`/${name.toLowerCase()}`}
-                  className="text-sm"
+    <div className="min-h-screen bg-[var(--color-surface)]">
+      <header className="border-b border-[var(--color-border)]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link to="/" className="inline-flex items-center gap-2">
+            <Logo size="sm" />
+            <span className="sr-only">DevConnect home</span>
+          </Link>
+          <nav aria-label="Account" className="flex items-center gap-2">
+            <Dropdown
+              label="Change theme"
+              width="w-48"
+              trigger={
+                <span className="inline-flex h-8 w-8 items-center justify-center text-[var(--color-text-secondary)]">
+                  {theme === 'dark' ? (
+                    <Moon aria-hidden className="h-4 w-4" />
+                  ) : theme === 'light' ? (
+                    <Sun aria-hidden className="h-4 w-4" />
+                  ) : (
+                    <Monitor aria-hidden className="h-4 w-4" />
+                  )}
+                </span>
+              }
+            >
+              <DropdownLabel>Appearance</DropdownLabel>
+              {THEME_OPTIONS.map((option) => (
+                <DropdownItem
+                  key={option.value}
+                  icon={option.icon}
+                  active={theme === option.value}
+                  onClick={() => setTheme(option.value)}
                 >
-                  {name}
-                </Link>
+                  {option.label}
+                  {theme === option.value && (
+                    <Check aria-hidden className="ml-auto h-3.5 w-3.5 text-[var(--color-accent)]" />
+                  )}
+                </DropdownItem>
               ))}
-            </nav>
-
-            <div className="flex items-center gap-2">
-              {/* Theme toggle */}
-              <button
-                onClick={toggleTheme}
-                className="hidden md:flex p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors"
-                aria-label="Toggle theme"
-              >
-                {theme === 'light'
-                  ? <span className="text-base">🌙</span>
-                  : <span className="text-base">☀️</span>
-                }
-              </button>
-              <Link to="/login">
-                <Button variant="ghost" size="md" className="hidden sm:inline-flex">
+            </Dropdown>
+            {isAuthenticated ? (
+              <Button to="/" size="sm" icon={ArrowRight} iconPosition="right">
+                Open your app
+              </Button>
+            ) : (
+              <>
+                <Button to="/login" variant="ghost" size="sm">
                   Sign in
                 </Button>
-              </Link>
-              <Link to="/register">
-                <Button
-                  size="md"
-                  className="hero-cta-primary"
-                  icon={ArrowRight}
-                  iconPosition="right"
-                >
-                  Get started free
+                <Button to="/register" size="sm">
+                  Create account
                 </Button>
-              </Link>
-              <button
-                className="md:hidden p-2 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] transition-colors ml-1"
-                onClick={() => setIsMobileMenuOpen((v) => !v)}
-                aria-label="Toggle menu"
-              >
-                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Mobile nav */}
-          {isMobileMenuOpen && (
-            <div className="md:hidden pb-4 pt-2 border-t border-[var(--color-border)] animate-fade-up">
-              <div className="flex flex-col gap-1">
-                {['Developers', 'Projects', 'Jobs'].map((name) => (
-                  <Link
-                    key={name}
-                    to={`/${name.toLowerCase()}`}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="px-3 py-2.5 rounded-lg text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-alt)] hover:text-[var(--color-primary)] transition-colors"
-                  >
-                    {name}
-                  </Link>
-                ))}
-                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="ghost" size="md" fullWidth className="mt-2">
-                    Sign in
-                  </Button>
-                </Link>
-                <Link to="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button size="md" fullWidth className="hero-cta-primary mt-1">
-                    Get started free
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          )}
+              </>
+            )}
+          </nav>
         </div>
       </header>
 
-      {/* ══════════════════════════════════════════════════════
-          HERO
-      ══════════════════════════════════════════════════════ */}
-      <section className="hero-section">
-        <div className="container">
-          <div className="hero-copy mx-auto text-center">
+      <main>
+        <motion.section {...entrance} className="mx-auto max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
+          <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-tertiary)]">
+            Developer network &middot; job matching you can read
+          </p>
+          <h1 className="mt-3 max-w-3xl text-3xl font-semibold leading-tight tracking-tight text-[var(--color-text-primary)] sm:text-4xl">
+            A job match you can read: {pluralize(counts.jobs, 'posting')}, scored against your skills
+            with the reasons shown
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--color-text-secondary)]">
+            DevConnect scores a developer against a posting with four documented weights, then prints the maths.
+            No black box, no ranking you have to trust — and no recruiter sees a different number for the same
+            profile.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button to="/login" size="lg" icon={ArrowRight} iconPosition="right">
+              Browse jobs
+            </Button>
+            <Button to="/register" size="lg" variant="outline">
+              Create a free account
+            </Button>
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+            {available
+              ? 'Pick a sample profile on the sign-in page to explore a populated account.'
+              : 'Storage is unavailable in this browser, so changes will not be saved between visits.'}
+          </p>
 
-            {/* Eyebrow */}
-            <div className="hero-eyebrow mb-7 animate-fade-up">
-              <Sparkles className="h-3 w-3" />
-              The developer network that actually works
-            </div>
+          <dl className="mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-border)] sm:grid-cols-4">
+            <Fact label="Developer profiles" value={developers} />
+            <Fact label="Recruiter accounts" value={recruiters} />
+            <Fact label="Open postings" value={counts.jobs} />
+            <Fact label="Skills across postings" value={skillCount} />
+          </dl>
+        </motion.section>
 
-            {/* Headline */}
-            <h1 className="hero-title font-extrabold text-[var(--color-text-primary)] mb-7 animate-fade-up" style={{ animationDelay: '0.07s' }}>
-              Where great code meets{' '}
-              <span className="gradient-text">real opportunity.</span>
-            </h1>
-
-            {/* Sub */}
-            <p className="hero-description mb-9 mx-auto animate-fade-up" style={{ animationDelay: '0.13s' }}>
-              Build your developer identity, showcase what you've built, connect with people worth knowing, and land the role that fits your ambition — all in one place.
+        <section className="border-t border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+            <h2 className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">
+              Two roles, two different jobs to do
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              The same store serves both. What changes is what you are allowed to write.
             </p>
-
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-center mb-9 animate-fade-up" style={{ animationDelay: '0.18s' }}>
-              <Link to="/register">
-                <Button
-                  size="lg"
-                  icon={ArrowRight}
-                  iconPosition="right"
-                  className="hero-cta-primary w-full sm:w-auto px-8"
-                >
-                  Create your profile — it's free
-                </Button>
-              </Link>
-              <Link to="/developers">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto gap-2"
-                >
-                  <Globe className="h-4 w-4" />
-                  Explore the community
-                </Button>
-              </Link>
-            </div>
-
-            {/* Trust signals */}
-            <div className="hero-trust animate-fade-up" style={{ animationDelay: '0.22s' }}>
-              {[
-                { icon: CheckCircle2, text: 'Free forever plan' },
-                { icon: Shield, text: 'No spam, ever' },
-                { icon: Zap, text: 'Set up in 3 minutes' },
-              ].map(({ icon: Icon, text }) => (
-                <div key={text} className="hero-trust-item">
-                  <Icon className="h-3.5 w-3.5 text-[var(--color-primary)]" />
-                  <span>{text}</span>
-                </div>
-              ))}
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <RoleColumn
+                title="For developers"
+                points={DEVELOPER_POINTS}
+                footnote={`Developers on DevConnect have submitted ${formatNumber(counts.applications)} applications so far.`}
+              />
+              <RoleColumn
+                title="For recruiters"
+                points={RECRUITER_POINTS}
+                footnote={`Postings, pipeline and saved candidates are write-restricted to recruiter accounts.`}
+              />
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ══════════════════════════════════════════════════════
-          DEVELOPER PREVIEW CARDS
-      ══════════════════════════════════════════════════════ */}
-      <section className="preview-section">
-        <div className="container">
-          <div className="text-center mb-12">
-            <div className="section-kicker mb-3">Community spotlight</div>
-            <h2 className="text-3xl md:text-[2.5rem] font-bold text-[var(--color-text-primary)] mb-4 leading-tight">
-              Meet your future teammates.
-            </h2>
-            <p className="text-[var(--color-text-secondary)] max-w-xl mx-auto">
-              Thousands of talented developers are already here, ready to connect and collaborate.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 stagger-children">
-            {sampleDevelopers.map((dev) => (
-              <div key={dev.name} className="developer-preview p-5 animate-fade-up">
-                {/* Top accent dot */}
-                <div className="flex items-start justify-between mb-4">
-                  <Avatar size="lg" fallback={dev.avatar} />
-                  <span className="preview-stat-badge">
-                    <Star className="h-3 w-3" /> {dev.stars}
-                  </span>
-                </div>
-                <h3 className="font-semibold text-[var(--color-text-primary)] mb-0.5">
-                  {dev.name}
-                </h3>
-                <p className="text-sm text-[var(--color-text-secondary)] mb-1">{dev.role}</p>
-                <p className="text-xs text-[var(--color-text-tertiary)] mb-3 flex items-center gap-1">
-                  <Globe className="h-3 w-3" />{dev.location}
-                </p>
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {dev.skills.map((s) => (
-                    <Badge key={s} variant="outline" size="sm">
-                      {s}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between text-xs text-[var(--color-text-tertiary)]">
-                  <span className="flex items-center gap-1">
-                    <GitBranch className="h-3 w-3" />{dev.repos} repos
-                  </span>
-                  <Button size="sm" variant="outline">Connect</Button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center mt-8">
-            <Link to="/developers">
-              <Button variant="ghost" size="md" icon={ArrowRight} iconPosition="right">
-                Browse all developers
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════════════
-          FEATURES
-      ══════════════════════════════════════════════════════ */}
-      <section className="feature-section">
-        <div className="container relative">
-          <div className="text-center mb-14">
-            <div className="section-kicker mb-3">Everything you need</div>
-            <h2 className="text-3xl md:text-[2.5rem] font-bold text-[var(--color-text-primary)] mb-4 leading-tight">
-              Built specifically for developers.
-            </h2>
-            <p className="text-[var(--color-text-secondary)] max-w-2xl mx-auto">
-              Every feature on DevConnect is designed around how developers actually think, work, and grow.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 stagger-children">
-            {features.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <div key={feature.title} className="feature-card animate-fade-up">
-                  <div
-                    className="feature-icon"
-                    style={{ '--feature-color': feature.color }}
-                  >
-                    <Icon
-                      className="h-5.5 w-5.5"
-                      style={{ color: feature.color }}
-                    />
-                  </div>
-                  <h3 className="font-semibold text-[var(--color-text-primary)] mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
-                    {feature.description}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════════════
-          HOW IT WORKS
-      ══════════════════════════════════════════════════════ */}
-      <section className="steps-section">
-        <div className="container relative">
-          <div className="text-center mb-14">
-            <div className="section-kicker mb-3">Simple by design</div>
-            <h2 className="text-3xl md:text-[2.5rem] font-bold text-[var(--color-text-primary)] mb-4 leading-tight">
-              Up and running in minutes.
-            </h2>
-            <p className="text-[var(--color-text-secondary)] max-w-xl mx-auto">
-              No lengthy onboarding. No confusing setup. Just your profile, your projects, and your next opportunity.
-            </p>
-          </div>
-
-          <div className="steps-grid grid grid-cols-1 md:grid-cols-3 gap-6 stagger-children">
-            {howItWorks.map((step) => (
-              <div key={step.step} className="step-card animate-fade-up">
-                <div className="step-number">{step.step}</div>
-                <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-                  {step.title}
-                </h3>
-                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
-                  {step.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════════════
-          TESTIMONIALS
-      ══════════════════════════════════════════════════════ */}
-      <section
-        className="py-24"
-        style={{ background: 'var(--color-surface)' }}
-      >
-        <div className="container">
-          <div className="text-center mb-14">
-            <div className="section-kicker mb-3">Social proof</div>
-            <h2 className="text-3xl md:text-[2.5rem] font-bold text-[var(--color-text-primary)] mb-4 leading-tight">
-              Developers love DevConnect.
-            </h2>
-            <div className="flex items-center justify-center gap-1 mb-1">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="h-4 w-4 fill-[var(--color-amber)] text-[var(--color-amber)]" />
-              ))}
-            </div>
-            <p className="text-sm text-[var(--color-text-tertiary)]">4.9 / 5 from 2,400+ reviews</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 stagger-children">
-            {testimonials.map((t) => (
-              <div key={t.name} className="testimonial-card animate-fade-up">
-                <div className="flex gap-0.5 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-[var(--color-amber)] text-[var(--color-amber)]" />
-                  ))}
-                </div>
-                <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed mb-5 italic">
-                  "{t.quote}"
-                </p>
-                <div className="flex items-center gap-3">
-                  <Avatar size="sm" fallback={t.avatar} />
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">{t.name}</p>
-                    <p className="text-xs text-[var(--color-text-tertiary)]">{t.role}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════════════
-          CTA
-      ══════════════════════════════════════════════════════ */}
-      <section className="cta-section">
-        <div className="container">
-          <Card className="cta-card max-w-4xl mx-auto">
-            <CardContent className="py-16 px-6 md:px-14 text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 border border-white/20 text-white text-xs font-bold tracking-widest uppercase mb-6">
-                <Sparkles className="h-3 w-3" />
-                Join the community
-              </div>
-              <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-5 leading-tight">
-                Your next chapter starts here.
+        <section className="border-t border-[var(--color-border)]">
+          <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">
+                How matching works
               </h2>
-              <p className="text-lg text-white/85 mb-9 max-w-xl mx-auto leading-relaxed">
-                Create a free profile, connect with incredible developers, and get discovered by the companies building the future.
+              <p className="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                It is a documented heuristic, not a trained model. Nothing learns, nothing is fitted to your
+                behaviour, and no other developer influences your score. A posting and a profile are compared on
+                four axes that always add up to {totalWeight}, and the same inputs always give the same output.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link to="/register">
-                  <Button size="lg" className="cta-btn-primary w-full sm:w-auto px-8" icon={ArrowRight} iconPosition="right">
-                    Get started for free
-                  </Button>
-                </Link>
-                <Link to="/developers">
-                  <Button size="lg" className="cta-btn-outline w-full sm:w-auto">
-                    Explore developers
-                  </Button>
-                </Link>
-              </div>
-              <p className="text-white/55 text-xs mt-6">
-                No credit card required · Cancel anytime · Free forever plan available
+              <p className="mt-3 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                Skill names are canonicalised before comparison, so <code>react</code>, <code>React</code> and{' '}
+                <code>ReactJS</code> count as one skill. Missing evidence scores zero rather than guessing.
               </p>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+              <ul className="mt-5 space-y-2">
+                {BANDS.map((band) => (
+                  <li key={band.label} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="text-[var(--color-text-primary)]">{band.label}</span>
+                    <span className="tabular-nums text-[var(--color-text-tertiary)]">
+                      {band.min}–{band.max}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-      {/* ══════════════════════════════════════════════════════
-          FOOTER
-      ══════════════════════════════════════════════════════ */}
-      <Footer />
+            <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+              <h3 className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)]">
+                The weights behind every score
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+                Every match is built from these four factors. They are fixed and shared between both sides, so a
+                score means the same thing to a developer and to the recruiter looking at them.
+              </p>
+              <ul className="mt-4 space-y-4">
+                {Object.entries(MATCH_WEIGHTS).map(([key, weight]) => (
+                  <li key={key}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-sm font-medium text-[var(--color-text-primary)]">{labelFor(key)}</span>
+                      <span className="text-sm tabular-nums text-[var(--color-text-secondary)]">
+                        {weight} points
+                      </span>
+                    </div>
+                    <ProgressBar
+                      className="mt-1.5"
+                      value={weight}
+                      max={totalWeight}
+                      size="sm"
+                      tone={key === 'required' ? 'accent' : 'default'}
+                    />
+                    <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+                      {WEIGHT_COPY[key]}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-5 border-t border-[var(--color-border)] pt-4 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+                The score is advice, not a gate. A posting never auto-rejects you, and the reasons behind every
+                number are listed next to it.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-t border-[var(--color-border)] bg-[var(--color-surface-alt)]">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+            <h2 className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]">
+              Built to be read, not just ranked
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--color-text-secondary)]">
+              Matching is only useful when you can see why it made a call. DevConnect keeps the reasoning, the
+              weights and the data in the open on both sides of the table.
+            </p>
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <FactList title="Transparency" items={TRUST_ITEMS} />
+              <FactList title="How it works for you" items={CARE_ITEMS} />
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-[var(--color-border)]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            <Logo size="sm" />
+            <p className="mt-2 max-w-md text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+              A developer network where job matching is explained, not hidden — profiles, postings and applications
+              in one place.
+            </p>
+          </div>
+          <nav aria-label="Account links" className="flex flex-wrap items-center gap-4">
+            <FooterLink to="/login">Sign in</FooterLink>
+            <FooterLink to="/register">Create account</FooterLink>
+            <FooterLink to="/forgot-password">Forgot password</FooterLink>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }
+
+function labelFor(key) {
+  if (key === 'workMode') return 'Work mode';
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function Fact({ label, value }) {
+  return (
+    <div className="bg-[var(--color-surface)] px-4 py-3">
+      <dt className="text-xs text-[var(--color-text-tertiary)]">{label}</dt>
+      <dd className="mt-1 text-lg font-semibold tabular-nums text-[var(--color-text-primary)]">
+        {formatNumber(value)}
+      </dd>
+    </div>
+  );
+}
+
+function RoleColumn({ title, points, footnote }) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <h3 className="text-sm font-semibold tracking-tight text-[var(--color-text-primary)]">{title}</h3>
+      <ul className="mt-4 space-y-4">
+        {points.map(({ icon: Icon, title: pointTitle, body, to, cta }) => (
+          <li key={pointTitle} className="flex gap-3">
+            <Icon aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-text-tertiary)]" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">{pointTitle}</p>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)]">{body}</p>
+              <Link
+                to={to}
+                className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] underline-offset-4 hover:underline"
+              >
+                {cta}
+                <ArrowRight aria-hidden className="h-3 w-3" />
+              </Link>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 border-t border-[var(--color-border)] pt-3 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
+        {footnote}
+      </p>
+    </div>
+  );
+}
+
+function FactList({ title, items }) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+      <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-[var(--color-text-primary)]">
+        <Check aria-hidden className="h-4 w-4 text-[var(--color-success)]" />
+        {title}
+      </h3>
+      <ul className="mt-3 space-y-2.5">
+        {items.map((item) => (
+          <li key={item} className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function FooterLink({ to, children }) {
+  return (
+    <Link
+      to={to}
+      className="text-sm text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+    >
+      {children}
+    </Link>
+  );
+}
+
+export default Landing;

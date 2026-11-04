@@ -3,4 +3,6 @@
 @import './global.css';
 
 @import "tailwindcss";
-@config "../../tailwind.config.js";
+
+/* The former tailwind.config.js only declared content globs and the dark selector, both
+   of which Tailwind v4 now derives from source scanning and the @custom-variant above. */

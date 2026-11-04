@@ -1,329 +1,391 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, Button, Badge, SearchBar, Select, LoadingSkeleton, EmptyState } from '../components/common';
-import { MapPin, Clock, Building2, Bookmark, BookmarkCheck, X } from 'lucide-react';
-import { jobsService } from '../services';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Bookmark, SlidersHorizontal } from 'lucide-react';
+import { useAuth } from '../context';
+import { useStoreValue } from '../hooks/useStore';
 import { useDebounce } from '../hooks/useDebounce';
-import { useInfiniteScrollWithData } from '../hooks/useInfiniteScroll.jsx';
+import { jobs as jobsApi } from '../services/api';
+import { PageHeader } from '../components/common/PageHeader';
+import { FilterChips, FilterPanel } from '../components/common/FilterPanel';
+import { SearchBar } from '../components/common/SearchBar';
+import { SegmentedControl } from '../components/common/SegmentedControl';
+import { Button } from '../components/common/Button';
+import { IconButton } from '../components/common/IconButton';
+import { Avatar } from '../components/common/Avatar';
+import { Badge, StatusBadge } from '../components/common/Badge';
+import { SkillList } from '../components/common/Tag';
+import { MatchMeter } from '../components/common/MatchMeter';
+import { Pagination, ResultsCount } from '../components/common/Pagination';
+import { EmptyState } from '../components/common/EmptyState';
+import { useToast } from '../components/common/Toast';
+import { formatSalary, timeAgo } from '../utils/format';
+
+const PER_PAGE = 8;
+
+/** store param name -> URL param name */
+const URL_KEYS = {
+  query: 'q',
+  location: 'location',
+  minSalary: 'salary',
+  workMode: 'workMode',
+  jobType: 'jobType',
+  experienceLevel: 'level',
+  requiredSkills: 'skill',
+};
+
+const FACET_KEYS = ['workMode', 'jobType', 'experienceLevel', 'requiredSkills'];
+
+// Each store filter key (singular) maps to its aggregated facet array (plural) in getJobFacets().
+const FACET_SOURCE = {
+  workMode: 'workModes',
+  jobType: 'jobTypes',
+  experienceLevel: 'experienceLevels',
+  requiredSkills: 'skills',
+};
+
+const FACET_LABELS = {
+  workMode: 'Work mode',
+  jobType: 'Employment type',
+  experienceLevel: 'Experience',
+  requiredSkills: 'Skills',
+};
+
+const readable = (value) => String(value).replace(/-/g, ' ');
+
+function fromParams(params) {
+  const filters = {
+    query: params.get('q') ?? '',
+    location: params.get('location') ?? '',
+    minSalary: Number(params.get('salary')) || 0,
+    sort: params.get('sort') ?? 'recent',
+    page: Number(params.get('page')) || 1,
+  };
+  for (const key of FACET_KEYS) filters[key] = params.getAll(URL_KEYS[key]);
+  return filters;
+}
+
+function toParams(filters) {
+  const next = new URLSearchParams();
+  for (const [key, urlKey] of Object.entries(URL_KEYS)) {
+    if (key === 'query') continue;
+    const value = filters[key];
+    if (Array.isArray(value)) {
+      for (const item of value) next.append(urlKey, item);
+    } else if (value) {
+      next.set(urlKey, String(value));
+    }
+  }
+  if (filters.query) next.set('q', filters.query);
+  if (filters.sort && filters.sort !== 'recent') next.set('sort', filters.sort);
+  if (filters.page > 1) next.set('page', String(filters.page));
+  return next;
+}
 
 export function Jobs() {
+  const toast = useToast();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  
-  const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
-  const [jobType, setJobType] = useState(searchParams.get('type') || '');
-  const [location, setLocation] = useState(searchParams.get('location') || '');
-  const [remote, setRemote] = useState(searchParams.get('remote') || '');
-  const [experience, setExperience] = useState(searchParams.get('experience') || '');
-  const [sort, setSort] = useState(searchParams.get('sort') || 'recent');
-  
-  const [savedJobs, setSavedJobs] = useState(new Set());
-  
-  const debouncedSearch = useDebounce(searchTerm, 500);
-  
-  const jobTypes = [
-    { value: '', label: 'All Types' },
-    { value: 'full-time', label: 'Full-time' },
-    { value: 'part-time', label: 'Part-time' },
-    { value: 'contract', label: 'Contract' },
-    { value: 'freelance', label: 'Freelance' },
-    { value: 'internship', label: 'Internship' },
-  ];
-  
-  const locations = [
-    { value: '', label: 'All Locations' },
-    { value: 'remote', label: 'Remote' },
-    { value: 'on-site', label: 'On-site' },
-    { value: 'hybrid', label: 'Hybrid' },
-  ];
-  
-  const remoteOptions = [
-    { value: '', label: 'Any' },
-    { value: 'true', label: 'Remote Only' },
-    { value: 'false', label: 'On-site Only' },
-  ];
-  
-  const experienceLevels = [
-    { value: '', label: 'All Levels' },
-    { value: 'entry', label: 'Entry Level' },
-    { value: 'mid', label: 'Mid Level' },
-    { value: 'senior', label: 'Senior' },
-    { value: 'lead', label: 'Lead' },
-  ];
-  
-  const sortOptions = [
-    { value: 'recent', label: 'Most Recent' },
-    { value: 'deadline', label: 'Deadline Soon' },
-    { value: 'applicants', label: 'Most Applicants' },
-  ];
+  const { user, isDeveloper } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const [searchText, setSearchText] = useState(() => params.get('q') ?? '');
+  const [saving, setSaving] = useState(null);
 
-  const fetchPage = useCallback(async (pageNum, limit) => {
-    const params = {
-      page: pageNum,
-      limit,
-      ...(debouncedSearch && { query: debouncedSearch }),
-      ...(jobType && { type: jobType }),
-      ...(location && { location }),
-      ...(remote && { remote: remote === 'true' }),
-      ...(experience && { experience }),
-      ...(sort && { sort }),
-    };
-    
-    const response = await jobsService.getJobs(params);
-    return {
-      data: response.jobs,
-      total: response.total,
-    };
-  }, [debouncedSearch, jobType, location, remote, experience, sort]);
+  const debouncedSearch = useDebounce(searchText, 250);
+  const filters = useMemo(() => fromParams(params), [params]);
 
-  const {
-    data: jobs,
-    isLoading,
-    isLoadingMore,
-    error,
-    hasNextPage,
-    fetchNextPage,
-    refresh,
-    sentinel,
-  } = useInfiniteScrollWithData({
-    fetchPage,
-    getKey: (job) => job.id,
-    pageSize: 20,
-  });
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (debouncedSearch) params.set('q', debouncedSearch);
-    if (jobType) params.set('type', jobType);
-    if (location) params.set('location', location);
-    if (remote) params.set('remote', remote);
-    if (experience) params.set('experience', experience);
-    if (sort) params.set('sort', sort);
-    
-    setSearchParams(params, { replace: true });
-  }, [debouncedSearch, jobType, location, remote, experience, sort, setSearchParams]);
-
-  const handleSearchChange = (value) => {
-    setSearchTerm(value);
-    refresh();
-  };
-  
-  const handleFilterChange = (key, value) => {
-    if (key === 'jobType') setJobType(value);
-    if (key === 'location') setLocation(value);
-    if (key === 'remote') setRemote(value);
-    if (key === 'experience') setExperience(value);
-    if (key === 'sort') setSort(value);
-    refresh();
-  };
-  
-  const handleResetFilters = () => {
-    setSearchTerm('');
-    setJobType('');
-    setLocation('');
-    setRemote('');
-    setExperience('');
-    setSort('recent');
-    refresh();
-  };
-
-  const handleSaveJob = async (jobId) => {
-    try {
-      if (savedJobs.has(jobId)) {
-        await jobsService.unsaveJob(jobId);
-        setSavedJobs(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(jobId);
-          return newSet;
-        });
-      } else {
-        await jobsService.saveJob(jobId);
-        setSavedJobs(prev => new Set(prev).add(jobId));
-      }
-    } catch (err) {
-      console.error('Failed to save/unsave job:', err);
-    }
-  };
-  
-  const handleViewJob = (jobId) => {
-    navigate(`/jobs/${jobId}`);
-  };
-
-  const hasActiveFilters = searchTerm || jobType || location || remote || experience || sort !== 'recent';
-  
-  const renderJobCard = (job) => (
-    <Card key={job.id} hover>
-      <CardContent className="pt-6">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-lg bg-[var(--color-primary)] flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                {job.company?.name?.[0] || '?'}
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-1">
-                  {job.title}
-                </h3>
-                <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)] mb-2">
-                  <Building2 className="h-4 w-4" />
-                  {job.company?.name || 'Unknown Company'}
-                </div>
-                <div className="flex flex-wrap gap-3 text-sm text-[var(--color-text-secondary)] mb-3">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    {job.location || 'Not specified'}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {job.type || 'Not specified'}
-                  </div>
-                  {job.remote && (
-                    <Badge variant="secondary" size="sm">Remote</Badge>
-                  )}
-                </div>
-                <p className="text-sm text-[var(--color-text-secondary)] mb-3 line-clamp-2">
-                  {job.description}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {job.skills?.slice(0, 4).map((skill) => (
-                    <Badge key={skill} variant="outline" size="sm">
-                      {skill}
-                    </Badge>
-                  ))}
-                  {(job.skills?.length || 0) > 4 && (
-                    <Badge variant="gray" size="sm">
-                      +{(job.skills?.length || 0) - 4}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex md:flex-col gap-2">
-            <Button onClick={() => handleViewJob(job.id)}>
-              View Details
-            </Button>
-            <Button
-              variant="outline"
-              icon={savedJobs.has(job.id) ? BookmarkCheck : Bookmark}
-              onClick={() => handleSaveJob(job.id)}
-            >
-              {savedJobs.has(job.id) ? 'Saved' : 'Save'}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+  const write = useCallback(
+    (patch) => setParams(toParams({ ...fromParams(params), ...patch }), { replace: true }),
+    [params, setParams],
   );
 
+  const boardQuery = useMemo(
+    () => ({
+      ...filters,
+      query: debouncedSearch,
+      minSalary: filters.minSalary || undefined,
+      status: 'published',
+      savedBy: user?.id,
+      matchFor: isDeveloper ? user.id : undefined,
+      perPage: PER_PAGE,
+    }),
+    [filters, debouncedSearch, user, isDeveloper],
+  );
+
+  // The saved flag travels inside the query result, so a bookmark click has to re-run it or the
+  // card keeps answering "Save" for a role that is already saved.
+  const results = useStoreValue(() => jobsApi.query(boardQuery), [boardQuery]);
+  const facets = useMemo(() => jobsApi.facets(), []);
+
+  const groups = useMemo(
+    () =>
+      FACET_KEYS.map((key) => {
+        const source = facets[FACET_SOURCE[key]] ?? [];
+        const optionValues = key === 'requiredSkills' ? source.slice(0, 16) : source;
+        return {
+          name: key,
+          label: FACET_LABELS[key],
+          type: 'checkbox',
+          value: filters[key],
+          options: optionValues.map((value) => ({
+            value,
+            label: readable(value),
+            // Count with this facet's own selection ignored, so numbers never contradict the list.
+            count: jobsApi.query({
+              ...boardQuery,
+              [key]: [value],
+              page: 1,
+              perPage: 1,
+            }).total,
+          })),
+        };
+      }),
+    [facets, boardQuery, filters],
+  );
+
+  const chips = useMemo(() => {
+    const list = [];
+    for (const key of FACET_KEYS) {
+      for (const value of filters[key]) {
+        list.push({ name: key, value, label: `${FACET_LABELS[key]}: ${readable(value)}` });
+      }
+    }
+    if (filters.minSalary) {
+      list.push({ name: 'minSalary', value: filters.minSalary, label: `Min ${filters.minSalary.toLocaleString()}` });
+    }
+    if (filters.location) list.push({ name: 'location', value: filters.location, label: `Near “${filters.location}”` });
+    return list;
+  }, [filters]);
+
+  function onFilterChange(patch) {
+    write({ ...patch, page: 1 });
+  }
+
+  function removeChip(chip) {
+    if (chip.name === 'minSalary') write({ minSalary: 0, page: 1 });
+    else if (chip.name === 'location') write({ location: '', page: 1 });
+    else write({ [chip.name]: filters[chip.name].filter((value) => value !== chip.value), page: 1 });
+  }
+
+  function clearAll() {
+    setSearchText('');
+    setParams(toParams({ ...fromParams(params), query: '', location: '', minSalary: 0, page: 1 }), {
+      replace: true,
+    });
+  }
+
+  async function toggleSave(job) {
+    setSaving(job.id);
+    if (job.isSaved) await jobsApi.unsave(user.id, job.id);
+    else await jobsApi.save(user.id, job.id);
+    setSaving(null);
+    toast.success(job.isSaved ? `Unsaved ${job.title}` : `Saved ${job.title}`, {
+      action: job.isSaved
+        ? undefined
+        : { label: 'Open saved list', onClick: () => navigate('/saved') },
+    });
+  }
+
+  if (!user) return null;
+
+  const sorts = isDeveloper
+    ? [
+        { value: 'recent', label: 'Newest' },
+        { value: 'match', label: 'Best match' },
+        { value: 'salary-high', label: 'Pay: high' },
+        { value: 'salary-low', label: 'Pay: low' },
+        { value: 'soonest', label: 'Closing soon' },
+      ]
+    : [
+        { value: 'recent', label: 'Newest' },
+        { value: 'salary-high', label: 'Pay: high' },
+        { value: 'soonest', label: 'Closing soon' },
+      ];
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
-        Jobs
-      </h1>
-      
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-              Filter Jobs
-            </h2>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" icon={X} onClick={handleResetFilters}>
-                Reset Filters
-              </Button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <div className="md:col-span-2 lg:col-span-3">
-              <SearchBar
-                placeholder="Search by title, company, or keywords..."
-                value={searchTerm}
-                onChange={handleSearchChange}
+    <div>
+      <PageHeader
+        title="Job board"
+        description={`${results.total} published ${results.total === 1 ? 'role' : 'roles'} from ${facets.companies.length} companies. Filters and sorting run against the real dataset.`}
+        actions={
+          <>
+            <Button to="/matches" variant="outline" icon={SlidersHorizontal}>
+              Matched for me
+            </Button>
+            <Button to="/saved" variant="ghost" icon={Bookmark}>
+              Saved
+            </Button>
+          </>
+        }
+      />
+
+      <div className="flex items-start gap-6">
+        <FilterPanel
+          groups={groups}
+          onChange={onFilterChange}
+          onClear={clearAll}
+          activeCount={chips.length}
+          resultLabel={`${results.total} ${results.total === 1 ? 'role' : 'roles'} showing`}
+        />
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-[12rem] flex-1">
+                <label htmlFor="jobs-search" className="sr-only">
+                  Search jobs
+                </label>
+                <SearchBar
+                  id="jobs-search"
+                  placeholder="Title, company, skill or location"
+                  value={searchText}
+                  onChange={(value) => {
+                    setSearchText(value);
+                    write({ query: value, page: 1 });
+                  }}
+                />
+              </div>
+              <SegmentedControl
+                ariaLabel="Sort jobs"
+                size="sm"
+                value={filters.sort}
+                onChange={(sort) => write({ sort, page: 1 })}
+                options={sorts}
               />
             </div>
-            <Select
-              options={jobTypes}
-              value={jobType}
-              onChange={(e) => handleFilterChange('jobType', e.target.value)}
-            />
-            <Select
-              options={locations}
-              value={location}
-              onChange={(e) => handleFilterChange('location', e.target.value)}
-            />
-            <Select
-              options={remoteOptions}
-              value={remote}
-              onChange={(e) => handleFilterChange('remote', e.target.value)}
-            />
-            <Select
-              options={experienceLevels}
-              value={experience}
-              onChange={(e) => handleFilterChange('experience', e.target.value)}
-            />
-            <Select
-              options={sortOptions}
-              value={sort}
-              onChange={(e) => handleFilterChange('sort', e.target.value)}
+
+            <FilterChips chips={chips} onRemove={removeChip} onClear={clearAll} />
+
+            <ResultsCount
+              total={results.total}
+              shown={results.items.length}
+              noun="roles"
+              singular="role"
+              query={debouncedSearch || undefined}
+              className="text-xs"
             />
           </div>
-        </CardContent>
-      </Card>
-      
-      {/* Results */}
-      {isLoading ? (
-        <div className="space-y-4">
-          <LoadingSkeleton variant="card" />
-          <LoadingSkeleton variant="card" />
-          <LoadingSkeleton variant="card" />
+
+          {results.items.length === 0 ? (
+            <EmptyState
+              icon="search"
+              title="No roles match these filters"
+              description={
+                chips.length
+                  ? 'Drop one filter at a time. Skills and the minimum salary are the two that most often empty the board.'
+                  : 'There are no open postings right now. Check back soon, or adjust your filters to widen the search.'
+              }
+              action={
+                chips.length ? (
+                  <Button onClick={clearAll} size="sm" variant="outline">
+                    Clear filters
+                  </Button>
+                ) : (
+                  <Button to="/settings" size="sm" variant="outline">
+                    Open settings
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <ul className="space-y-3">
+              {results.items.map((job) => (
+                <li key={job.id}>
+                  <JobCard
+                    job={job}
+                    developerView={isDeveloper}
+                    saving={saving === job.id}
+                    onSave={() => toggleSave(job)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Pagination
+            page={results.page}
+            totalPages={results.totalPages}
+            onPageChange={(page) => {
+              write({ page });
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="mt-6"
+          />
         </div>
-      ) : error ? (
-        <div className="p-4 bg-[var(--color-error)]/10 border border-[var(--color-error)] rounded-lg">
-          <p className="text-[var(--color-error)]">{error}</p>
-          <Button variant="outline" size="sm" onClick={refresh} className="mt-2">
-            Try Again
-          </Button>
-        </div>
-      ) : jobs.length === 0 ? (
-        <EmptyState
-          icon="Briefcase"
-          title="No jobs found"
-          description="Try adjusting your filters or search terms"
-        />
-      ) : (
-        <>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              {jobs.length} jobs found
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-4">
-            {jobs.map(renderJobCard)}
-          </div>
-          
-          <div ref={sentinel} className="flex items-center justify-center py-6">
-            {isLoadingMore ? (
-              <div className="flex items-center gap-3 text-[var(--color-text-secondary)]">
-                <div className="h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-                <span>Loading more jobs...</span>
-              </div>
-            ) : hasNextPage ? (
-              <Button 
-                variant="outline" 
-                size="lg"
-                onClick={fetchNextPage}
-                disabled={isLoadingMore}
-              >
-                Load More Jobs
-              </Button>
-            ) : null}
-          </div>
-        </>
-      )}
+      </div>
     </div>
   );
 }
+
+function JobCard({ job, developerView, saving, onSave }) {
+  return (
+    <article className="rounded-[var(--radius-card)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition-colors hover:border-[var(--color-border-strong)]">
+      <div className="flex items-start gap-3">
+        <Avatar name={job.company?.name ?? job.title} size="lg" square />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-[var(--color-text-primary)] sm:text-base">
+                <Link to={`/jobs/${job.id}`} className="hover:text-[var(--color-accent)]">
+                  {job.title}
+                </Link>
+                {job.isFeatured && (
+                  <Badge tone="accent" className="ml-2 align-middle">
+                    Featured
+                  </Badge>
+                )}
+              </h2>
+              <p className="mt-0.5 truncate text-sm text-[var(--color-text-secondary)]">
+                {job.company?.name ?? 'DevConnect'} · {job.location}
+              </p>
+            </div>
+            <IconButton
+              icon={Bookmark}
+              label={job.isSaved ? `Unsave ${job.title}` : `Save ${job.title}`}
+              variant={job.isSaved ? 'solid' : 'ghost'}
+              onClick={onSave}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+            <StatusBadge status={job.workMode} kind="workMode" />
+            <Badge>{readable(job.jobType)}</Badge>
+            <Badge>{readable(job.experienceLevel)}</Badge>
+            {job.salary && (
+              <span className="font-medium text-[var(--color-text-primary)]">{formatSalary(job.salary)}</span>
+            )}
+            <span className="text-[var(--color-text-tertiary)]">Posted {timeAgo(job.postedAt)}</span>
+            {job.applyDeadline && (
+              <span className="text-[var(--color-text-tertiary)]">Closes {timeAgo(job.applyDeadline)}</span>
+            )}
+          </div>
+
+          <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+            {job.description}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+            <SkillList
+              skills={job.requiredSkills}
+              matched={job.match?.matchedSkills}
+              missing={job.match?.missingSkills}
+              max={6}
+            />
+            <div className="flex items-center gap-3">
+              {developerView && job.match && <MatchMeter match={job.match} className="w-32" />}
+              {job.hasApplied ? (
+                <Badge tone="success">Applied</Badge>
+              ) : (
+                <Button to={`/jobs/${job.id}`} size="sm">
+                  View role
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+export default Jobs;

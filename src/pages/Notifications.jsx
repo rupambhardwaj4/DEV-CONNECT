@@ -1,168 +1,232 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, Button, LoadingSkeleton, EmptyState } from '../components/common';
-import { Bell, Check, X, Clock } from 'lucide-react';
-import { notificationsService } from '../services';
+import {
+  Bell,
+  Briefcase,
+  CheckCheck,
+  Eye,
+  Settings,
+  Trash2,
+  UserPlus,
+  Users,
+} from 'lucide-react';
+import { useAuth } from '../context';
+import { useStoreValue, useNotificationCount } from '../hooks/useStore';
+import { notifications as notificationsApi } from '../services/api';
+import { PageHeader } from '../components/common/PageHeader';
+import { SectionCard } from '../components/common/Card';
+import { Button } from '../components/common/Button';
+import { IconButton } from '../components/common/IconButton';
+import { Select } from '../components/common/Select';
+import { SegmentedControl } from '../components/common/SegmentedControl';
+import { Badge } from '../components/common/Badge';
+import { NoNotifications } from '../components/common/EmptyState';
+import { useToast } from '../components/common/Toast';
+import { timeAgo, formatDay } from '../utils/format';
+
+const KIND_META = {
+  'application-update': { icon: Briefcase, label: 'Application', tone: 'info' },
+  'connection-request': { icon: UserPlus, label: 'Request', tone: 'accent' },
+  'connection-accepted': { icon: Users, label: 'Connection', tone: 'success' },
+  'recruiter-activity': { icon: Eye, label: 'Recruiter', tone: 'warning' },
+  system: { icon: Settings, label: 'System', tone: 'neutral' },
+};
+
+const meta = (kind) => KIND_META[kind] ?? { icon: Bell, label: 'Update', tone: 'neutral' };
 
 export function Notifications() {
+  const toast = useToast();
   const navigate = useNavigate();
-  
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  
-  useEffect(() => {
-    const loadNotifications = async () => {
-      setIsLoading(true);
-      setError('');
-      
-      try {
-        const response = await notificationsService.getNotifications({ limit: 50 });
-        setNotifications(response.notifications);
-        setUnreadCount(response.unreadCount || 0);
-      } catch (err) {
-        setError(err.message || 'Failed to fetch notifications');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    loadNotifications();
-  }, []);
-  
-  const handleMarkAsRead = async (id) => {
-    try {
-      await notificationsService.markAsRead(id);
-      setNotifications(prev => prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      ));
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (err) {
-      console.error('Failed to mark as read:', err);
-    }
-  };
-  
-  const handleMarkAllAsRead = async () => {
-    try {
-      await notificationsService.markAllAsRead();
-      setNotifications(prev => prev.map(notif => ({ ...notif, read: true })));
-      setUnreadCount(0);
-    } catch (err) {
-      console.error('Failed to mark all as read:', err);
-    }
-  };
-  
-  const handleDelete = async (id) => {
-    try {
-      await notificationsService.deleteNotification(id);
-      setNotifications(prev => prev.filter(notif => notif.id !== id));
-    } catch (err) {
-      console.error('Failed to delete notification:', err);
-    }
-  };
-  
-  const handleNotificationClick = (notification) => {
+  const { userId } = useAuth();
+  const [tab, setTab] = useState('all');
+  const [kind, setKind] = useState('all');
+  const [busy, setBusy] = useState(null);
+
+  const all = useStoreValue(() => (userId ? notificationsApi.list(userId) : []), [userId]);
+  const unreadCount = useNotificationCount(userId);
+
+  const kindOptions = useMemo(() => {
+    const present = [...new Set(all.map((n) => n.kind))];
+    return [
+      { value: 'all', label: 'All types' },
+      ...present.map((value) => ({ value, label: meta(value).label })),
+    ];
+  }, [all]);
+
+  const rows = useMemo(
+    () => all.filter((n) => (tab === 'unread' ? !n.read : true) && (kind === 'all' ? true : n.kind === kind)),
+    [all, tab, kind],
+  );
+
+  async function open(notification) {
     if (!notification.read) {
-      handleMarkAsRead(notification.id);
+      setBusy(notification.id);
+      await notificationsApi.markRead(notification.id, true);
+      setBusy(null);
     }
-    
-    if (notification.link) {
-      navigate(notification.link);
-    }
-  };
-  
-  if (isLoading) {
-    return (
-      <div className="max-w-3xl mx-auto space-y-6">
-        <LoadingSkeleton variant="card" />
-      </div>
-    );
+    if (notification.href) navigate(notification.href);
   }
-  
+
+  async function toggleRead(notification) {
+    setBusy(notification.id);
+    await notificationsApi.markRead(notification.id, !notification.read);
+    setBusy(null);
+  }
+
+  async function remove(notification) {
+    setBusy(notification.id);
+    await notificationsApi.remove(notification.id);
+    setBusy(null);
+    toast.success('Notification removed.');
+  }
+
+  async function markAllRead() {
+    setBusy('all');
+    await notificationsApi.markAllRead(userId);
+    setBusy(null);
+    toast.success('Marked everything as read.');
+  }
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
-          Notifications
-        </h1>
-        {unreadCount > 0 && (
-          <Button variant="outline" onClick={handleMarkAllAsRead}>
-            Mark All as Read
-          </Button>
-        )}
-      </div>
-      
-      {error && (
-        <div className="p-4 bg-[var(--color-error)]/10 border border-[var(--color-error)] rounded-lg">
-          <p className="text-[var(--color-error)]">{error}</p>
-        </div>
-      )}
-      
-      <Card>
-        <CardContent className="pt-6">
-          {notifications.length === 0 ? (
-            <EmptyState
-              icon="Bell"
-              title="No notifications"
-              description="You're all caught up!"
+    <div>
+      <PageHeader
+        eyebrow="Inbox"
+        title="Notifications"
+        description="Application updates, interview scheduling and connection requests land here. Read items stay in the list so history is never lost."
+        actions={
+          unreadCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              icon={CheckCheck}
+              onClick={markAllRead}
+              loading={busy === 'all'}
+            >
+              Mark all read
+            </Button>
+          )
+        }
+      />
+
+      <SectionCard
+        padding="none"
+        actions={
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              ariaLabel="Filter by read state"
+              size="sm"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'unread', label: `Unread${unreadCount ? ` (${unreadCount})` : ''}` },
+              ]}
             />
-          ) : (
-            <div className="space-y-3">
-              {notifications.map((notification) => (
-                <div
+            {kindOptions.length > 1 && (
+              <div className="w-40">
+                <Select
+                  aria-label="Filter by type"
+                  options={kindOptions}
+                  value={kind}
+                  onChange={(event) => setKind(event.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        }
+      >
+        {all.length === 0 ? (
+          <NoNotifications />
+        ) : rows.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">
+              {tab === 'unread' ? 'Nothing unread' : 'No notifications of this type'}
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-[var(--color-text-secondary)]">
+              {tab === 'unread'
+                ? "You're all caught up. Read items stay under All."
+                : 'Try a different type, or switch back to All.'}
+            </p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-[var(--color-border)]">
+            {rows.map((notification) => {
+              const Icon = meta(notification.kind).icon;
+              const isBusy = busy === notification.id;
+              return (
+                <li
                   key={notification.id}
-                  className={`p-4 rounded-lg transition-colors cursor-pointer ${
-                    notification.read
-                      ? 'bg-[var(--color-gray-50)]'
-                      : 'bg-[var(--color-primary)]/5 border-l-4 border-[var(--color-primary)]'
+                  className={`flex gap-3 p-4 transition-colors hover:bg-[color-mix(in_srgb,var(--color-surface-alt)_60%,transparent)] ${
+                    notification.read ? '' : 'border-l-2 border-l-[var(--color-accent)]'
                   }`}
-                  onClick={() => handleNotificationClick(notification)}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0">
-                      <Bell className="h-5 w-5 text-[var(--color-primary)]" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-[var(--color-text-primary)] mb-1">
-                        {notification.message}
-                      </p>
-                      <div className="flex items-center gap-4 text-xs text-[var(--color-text-tertiary)]">
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(notification.createdAt).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
+                  <div
+                    className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-alt)]"
+                    aria-hidden
+                  >
+                    <Icon className="h-4 w-4 text-[var(--color-text-secondary)]" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => open(notification)}
+                        className={`text-left text-sm hover:text-[var(--color-accent)] ${
+                          notification.read
+                            ? 'text-[var(--color-text-secondary)]'
+                            : 'font-semibold text-[var(--color-text-primary)]'
+                        }`}
+                      >
+                        {notification.title}
+                      </button>
                       {!notification.read && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={Check}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleMarkAsRead(notification.id);
-                          }}
-                        />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]" aria-label="Unread" />
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={X}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(notification.id);
-                        }}
-                      />
+                    </div>
+                    <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                      {notification.body}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-[var(--color-text-tertiary)]">
+                      <Badge variant="outline" size="sm">{meta(notification.kind).label}</Badge>
+                      <span title={formatDay(notification.createdAt)}>{timeAgo(notification.createdAt)}</span>
+                      {notification.href && (
+                        <button
+                          type="button"
+                          onClick={() => open(notification)}
+                          className="font-medium text-[var(--color-accent)] hover:text-[var(--color-accent-hover)]"
+                        >
+                          Open
+                        </button>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
+                  <div className="flex shrink-0 items-start gap-1">
+                    <IconButton
+                      icon={CheckCheck}
+                      size="sm"
+                      label={notification.read ? 'Mark as unread' : 'Mark as read'}
+                      onClick={() => toggleRead(notification)}
+                      disabled={isBusy}
+                    />
+                    <IconButton
+                      icon={Trash2}
+                      size="sm"
+                      variant="danger"
+                      label="Delete notification"
+                      onClick={() => remove(notification)}
+                      disabled={isBusy}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
     </div>
   );
 }
+
+export default Notifications;

@@ -1,163 +1,93 @@
-import { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Button, Card, CardContent } from '../../components/common';
-import { AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
-import { authService } from '../../services/auth';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, Mail } from 'lucide-react';
+import { useAuth } from '../../context';
+import { homePathFor } from '../../routes/ProtectedRoute';
+import { AuthNote, AuthShell } from './AuthShell';
+import { Button } from '../../components/common';
 
 export function VerifyEmail() {
-  const [searchParams] = useSearchParams();
-  
-  const token = searchParams.get('token');
-  
-  const [status, setStatus] = useState('loading'); // loading, success, error, expired
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  
-  const verifyEmail = useCallback(async () => {
-    try {
-      await authService.verifyEmail({ token });
-      setStatus('success');
-      setMessage('Your email has been verified successfully');
-    } catch (error) {
-      if (error.message?.includes('expired')) {
-        setStatus('expired');
-        setMessage('Verification link has expired');
-      } else {
-        setStatus('error');
-        setMessage(error.message || 'Failed to verify email');
-      }
-    }
-  }, [token]);
-  
-  useLayoutEffect(() => {
-    if (!token) {
-      setStatus('error');
-      setMessage('Invalid verification link');
-    }
-  }, [token]);
-  
-  useEffect(() => {
-    if (token) {
-      verifyEmail();
-    }
-  }, [token, verifyEmail]);
-  
-  const handleResend = async () => {
-    setIsLoading(true);
-    try {
-      await authService.resendVerification();
-      setStatus('success');
-      setMessage('Verification email sent. Please check your inbox.');
-    } catch (error) {
-      setStatus('error');
-      setMessage(error.message || 'Failed to resend verification email');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  const renderContent = () => {
-    switch (status) {
-      case 'loading':
-        return (
-          <>
-            <div className="w-16 h-16 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center mx-auto mb-4">
-              <RefreshCw className="h-8 w-8 text-[var(--color-primary)] animate-spin" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-              Verifying your email
-            </h1>
-            <p className="text-[var(--color-text-secondary)]">
-              Please wait while we verify your email address...
+  const navigate = useNavigate();
+  const { user, isVerified, verifyEmail, logout } = useAuth();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleVerify() {
+    setPending(true);
+    setError(null);
+    // Served, this is a round trip; offline it is a flag flip. Await both the same way.
+    const result = await verifyEmail();
+    setPending(false);
+    if (result.ok) navigate(homePathFor(user.role), { replace: true });
+    else setError(result.error);
+  }
+
+  if (!user) {
+    return (
+      <AuthShell title="Nothing to verify">
+        <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+          Your session ended, so there is no address to confirm. Sign in again and this screen will
+          show your account.
+        </p>
+        <Button to="/login" className="mt-5" fullWidth>
+          Go to sign in
+        </Button>
+      </AuthShell>
+    );
+  }
+
+  if (isVerified) {
+    return (
+      <AuthShell title="Email confirmed">
+        <div className="flex items-start gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-3.5">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-success)]" aria-hidden />
+          <div>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">{user.email}</p>
+            <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+              This account is already confirmed.
             </p>
-          </>
-        );
-      
-      case 'success':
-        return (
-          <>
-            <div className="w-16 h-16 rounded-full bg-[var(--color-success)]/10 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="h-8 w-8 text-[var(--color-success)]" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-              Email verified!
-            </h1>
-            <p className="text-[var(--color-text-secondary)] mb-6">
-              {message}
-            </p>
-            <Link to="/onboarding">
-              <Button fullWidth size="lg">
-                Continue to onboarding
-              </Button>
-            </Link>
-          </>
-        );
-      
-      case 'expired':
-        return (
-          <>
-            <div className="w-16 h-16 rounded-full bg-[var(--color-warning)]/10 flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="h-8 w-8 text-[var(--color-warning)]" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-              Link expired
-            </h1>
-            <p className="text-[var(--color-text-secondary)] mb-6">
-              {message}
-            </p>
-            <Button
-              fullWidth
-              size="lg"
-              loading={isLoading}
-              disabled={isLoading}
-              onClick={handleResend}
-            >
-              Resend verification email
-            </Button>
-          </>
-        );
-      
-      case 'error':
-      default:
-        return (
-          <>
-            <div className="w-16 h-16 rounded-full bg-[var(--color-error)]/10 flex items-center justify-center mx-auto mb-4">
-              <AlertCircle className="h-8 w-8 text-[var(--color-error)]" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
-              Verification failed
-            </h1>
-            <p className="text-[var(--color-text-secondary)] mb-6">
-              {message}
-            </p>
-            <div className="space-y-3">
-              <Button
-                fullWidth
-                variant="outline"
-                loading={isLoading}
-                disabled={isLoading}
-                onClick={handleResend}
-              >
-                Resend verification email
-              </Button>
-              <Link to="/login">
-                <Button fullWidth variant="ghost">
-                  Back to login
-                </Button>
-              </Link>
-            </div>
-          </>
-        );
-    }
-  };
-  
+          </div>
+        </div>
+        <Button to={homePathFor(user.role)} className="mt-5" fullWidth size="lg">
+          Open my dashboard
+        </Button>
+      </AuthShell>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)] py-12 px-4">
-      <Card className="w-full max-w-md">
-        <CardContent className="pt-8 pb-8 text-center">
-          {renderContent()}
-        </CardContent>
-      </Card>
-    </div>
+    <AuthShell
+      title="Confirm your email"
+      subtitle={`We would have sent a link to ${user.email}. Open it below to continue.`}
+    >
+      <div className="flex items-start gap-3 rounded-[var(--radius-control)] border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-3.5">
+        <Mail className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-text-tertiary)]" aria-hidden />
+        <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">
+          Until this is confirmed the rest of the app stays locked, which is how the real product
+          behaves for unverified accounts.
+        </p>
+      </div>
+
+      {error && <p className="mt-3 text-sm text-[var(--color-error)]">{error}</p>}
+
+      <Button onClick={handleVerify} loading={pending} className="mt-5" fullWidth size="lg">
+        Open verification link
+      </Button>
+      <Button
+        onClick={() => {
+          logout();
+          navigate('/login', { replace: true });
+        }}
+        variant="ghost"
+        fullWidth
+        className="mt-2"
+      >
+        Use a different account
+      </Button>
+
+      <AuthNote>
+        No message is sent. Pressing this marks the flag on your local profile immediately.
+      </AuthNote>
+    </AuthShell>
   );
 }
